@@ -1,0 +1,30 @@
+# Data cache hasil download (jangan commit, bisa di-regenerate)
+/data/
+
+# Kredensial & kunci — JANGAN PERNAH commit
+.env
+*.pem
+
+# macOS
+.DS_Store
+
+# Log
+/logs/
+*.log
+
+# Binari build (Go output)
+/bin/
+/fetch
+/alertd
+/backtest
+/dayscan
+/moanalysis
+/narrate
+/q1sweep
+
+# Artifact hasil generate (bisa dibuat ulang dari engine)
+backtest_result.xlsx
+*.svg
+
+# Backup
+*.bak
