@@ -1,0 +1,919 @@
+//@version=5
+// Luna Trade Indicators — deteksi struktur pasar otomatis (gabungan 2 modul).
+//   MODUL A — Struktur (TF chart):
+//     Intraday TF : ITH/ITL (intermediate high/low, pola 5-titik + 3 syarat konfirmasi).
+//     Weekly TF   : LTH/LTL (anchor Order Flow: swing high terbaru di atas / swing low
+//                   terbaru di bawah harga). Tampil 1 aktif + 1 "Old" (pudar) per arah.
+//   MODUL B — PD Array (multi-TF H1+H4+D via request.security):
+//     Komponen FVG / FVGBreak / VI / BB / OB / BPR terdekat ke harga, N per arah; yang lebih
+//     jauh ("yang kemarin") makin dipudarkan. BB vs OB dipisah via liquidity sweep (BB=
+//     continuation, OB=reversal). TANPA IFVG/clustering. Lihat blok bawah.
+//   MODUL C — QT Fractal (Quarterly Theory): kotak tipis tiap quarter siklus QT (ngepas
+//     range harga candle di quarter itu), LEVEL otomatis dari TF chart (5m=Session,
+//     15m=Daily, 1H=Mingguan, 4H=Bulanan, >4H=off). Anchor jam NY DST-aware, label
+//     NETRAL (display-only, tak meniru klasifikasi AMD engine).
+indicator("Luna Trade Indicators", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
+
+// ── Input ────────────────────────────────────────────────────────────────────
+leftBars   = input.int(1, "Pivot kiri (bar)",  minval=1, group="AMS — Swing 3-bar")
+rightBars  = input.int(1, "Pivot kanan (bar)", minval=1, group="AMS — Swing 3-bar")
+marksMult  = input.float(0.0, "Filter swing minimal (× ATR)  [0 = tanpa filter]", minval=0, step=0.1, group="AMS — Swing 3-bar", tooltip="0 = 3-bar dasar tanpa filter (granular, sesuai desain detektor AMS). Naikkan (mis. 0.5–1.0) untuk tampilan lebih bersih — namun sebagian STH/STL asli di tren cepat bisa terlewat.")
+atrPeriod  = input.int(14, "Periode ATR (filter swing)", minval=1, group="AMS — Swing 3-bar")
+breakBody  = input.bool(false, "Konfirmasi break pakai BODY (close)  [default: wick]", group="AMS — Konfirmasi")
+showZigzag = input.bool(false, "Tampilkan garis zigzag swing", group="AMS — Tampilan")
+showLevels = input.bool(true,  "Tampilkan garis level", group="AMS — Tampilan")
+showDots   = input.bool(true,  "Tampilkan tanda STH/STL terakhir", group="AMS — Tampilan", tooltip="Gambar garis kecil ke samping di tiap pivot swing 3-bar (STH = high, STL = low) untuk N terakhir per arah. Hanya TF intraday (1H dst.), tidak di weekly.")
+dotsN      = input.int(5, "Jumlah STH/STL terakhir (per arah)", minval=1, maxval=20, group="AMS — Tampilan")
+dotsLen    = input.int(2, "Panjang garis tanda STH/STL (candle)", minval=1, maxval=20, group="AMS — Tampilan")
+colITL     = input.color(color.new(color.lime, 0), "Warna ITL / LTL", group="AMS — Tampilan")
+colITH     = input.color(color.new(color.red,  0), "Warna ITH / LTH", group="AMS — Tampilan")
+colBroken  = input.color(color.new(color.gray, 40), "Warna 'Old ITH/ITL' (dipudarkan)", group="AMS — Tampilan")
+
+// ── Input QT Fractal ───────────────────────────────────────────────────────────
+// Visual Quarterly Theory fraktal: LEVEL dipilih otomatis dari TF chart.
+showQT     = input.bool(true, "Tampilkan QT Fractal", group="QT")
+qtLevelOpt = input.string("Auto (by TF)", "Level", options=["Auto (by TF)","Session","Daily","Mingguan","Bulanan"], group="QT", tooltip="Auto: 5m=Session (sesi→4×90m), 15m=Daily (hari→4 sesi), 1H=Mingguan (minggu→hari Sen–Kam+Jum), 4H=Bulanan (bulan→4 minggu trading), >4H=off. Bisa dipaksa manual.")
+qtN        = input.int(4, "Jumlah siklus terakhir", minval=1, maxval=20, group="QT", tooltip="N sesi (Session) / hari (Daily) / minggu (Mingguan) / bulan (Bulanan) terakhir yang di-shade.")
+qtFill     = input.bool(false, "Isi kotak quarter (fill warna)", group="QT", tooltip="OFF (default): kotak tipis garis-tepi saja, mengikuti range harga (high–low) candle di quarter itu. ON: tambahkan isi warna transparan.")
+qtShowLbl  = input.bool(true, "Label penentuan (bawah-kanan kotak)", group="QT", tooltip="Bubble berlatar warna fase (gaya ITH/ITL) nempel di tepi bawah-kanan kotak, panah menunjuk ke atas: nama periode + quarter + fase AMD (A/M/D/X).")
+qtLblGap   = input.float(0.0, "Jarak label dari kotak (× ATR)", minval=0.0, step=0.1, group="QT", tooltip="0 = label nempel di tepi bawah-kanan kotak (panah menunjuk ke atas). Naikkan (× ATR TF chart) untuk geser ke bawah bila tiban dengan label AMS.")
+qtAmdMult  = input.float(1.5, "AMD: kelipatan ATR untuk X", minval=0.1, step=0.1, group="QT", tooltip="Penentuan AMDX/XAMD tiap siklus dari Q1 (akumulasi vs ekspansi): Q1 = X bila |close−open| Q1 ≥ mult×ATR, selain itu A. Mirror engine MinAtrMult=1.5, TANPA syarat FVG (engine default AsiaRequireFVG=false). ⚠️ ATR dihitung di TF CHART (atrPeriod) — pendekatan, bisa drift dari sub-TF engine; tune di sini bila perlu.")
+qtTransp   = input.int(90, "Transparansi isi kotak", minval=50, maxval=99, group="QT")
+qtColA     = input.color(color.blue,   "Fase A (Akumulasi)",  group="QT")
+qtColM     = input.color(color.orange, "Fase M (Manipulasi)", group="QT")
+qtColD     = input.color(color.green,  "Fase D (Distribusi)", group="QT")
+qtColX     = input.color(color.purple, "Fase X (Kelanjutan)", group="QT")
+
+// ── Deteksi swing 3-bar ───────────────────────────────────────────────────────
+ph = ta.pivothigh(leftBars, rightBars)
+pl = ta.pivotlow(leftBars, rightBars)
+
+// ATR = SMA True Range (rata-rata sederhana, bukan Wilder/RMA).
+atrVal = ta.sma(ta.tr(true), atrPeriod)
+minLeg = marksMult * atrVal
+
+// ── Zigzag: high/low selang-seling; turning point lawan-arah hanya diterima
+// kalau leg >= minLeg (filter micro-swing) ────────────────────────────────────
+var float[] zzPrice = array.new_float()
+var int[]   zzKind  = array.new_int()    // 1 = high, 0 = low
+var int[]   zzBar   = array.new_int()
+
+pushZZ(float price, int kind, int b, float minLegP) =>
+    n = array.size(zzKind)
+    if n == 0
+        array.push(zzPrice, price)
+        array.push(zzKind, kind)
+        array.push(zzBar, b)
+    else
+        lastKind  = array.get(zzKind, n - 1)
+        lastPrice = array.get(zzPrice, n - 1)
+        if kind == lastKind
+            if (kind == 1 and price > lastPrice) or (kind == 0 and price < lastPrice)
+                array.set(zzPrice, n - 1, price)
+                array.set(zzBar, n - 1, b)
+        else
+            if minLegP <= 0 or math.abs(price - lastPrice) >= minLegP
+                array.push(zzPrice, price)
+                array.push(zzKind, kind)
+                array.push(zzBar, b)
+
+// ── State kandidat pending ITL/ITH ───────────────────────────────────────────
+var bool  penLOn  = false
+var float penLtr  = na    // trough C (abort jika low < trough)
+var float penLref = na    // STH terbaru (break ke atas = konfirmasi)
+var int   penLbar = na
+var bool  penHOn  = false
+var float penHpk  = na    // peak C (abort jika high > peak)
+var float penHref = na    // STL terbaru (break ke bawah = konfirmasi)
+var int   penHbar = na
+
+// Catat pivot baru → update zigzag
+pivotHappened = false
+if not na(ph)
+    pushZZ(ph, 1, bar_index - rightBars, minLeg)
+    pivotHappened := true
+if not na(pl)
+    pushZZ(pl, 0, bar_index - rightBars, minLeg)
+    pivotHappened := true
+
+// Arm kandidat ITL/ITH dari pola 5-titik (A=n-5, B=n-4, C=n-3, E=n-2, D=n-1).
+// C wajib lebih ekstrem dari A (kiri) DAN D (kanan); kalau tidak → gugur.
+// Weekly: mesin ITH/ITL off, diganti anchor LTL/LTH (blok bawah).
+if not timeframe.isweekly and pivotHappened and array.size(zzKind) >= 5
+    n = array.size(zzKind)
+    kA = array.get(zzKind, n - 5)
+    kB = array.get(zzKind, n - 4)
+    kC = array.get(zzKind, n - 3)
+    kE = array.get(zzKind, n - 2)
+    kD = array.get(zzKind, n - 1)
+    pA = array.get(zzPrice, n - 5)
+    pC = array.get(zzPrice, n - 3)
+    pE = array.get(zzPrice, n - 2)
+    pD = array.get(zzPrice, n - 1)
+    bC = array.get(zzBar, n - 3)
+    if kA == 0 and kB == 1 and kC == 0 and kE == 1 and kD == 0 and pC < pA and pC < pD and (na(penLbar) or penLbar != bC)
+        penLOn  := true
+        penLtr  := pC
+        penLref := pE
+        penLbar := bC
+    if kA == 1 and kB == 0 and kC == 1 and kE == 0 and kD == 1 and pC > pA and pC > pD and (na(penHbar) or penHbar != bC)
+        penHOn  := true
+        penHpk  := pC
+        penHref := pE
+        penHbar := bC
+
+// Ratchet level konfirmasi ke STL/STH terbaru (sesuai syarat 3: break STL/STH
+// terbaru di struktur, bukan pra-peak). Ratchet ikut bergeser selama pending.
+if not timeframe.isweekly and pivotHappened and array.size(zzKind) >= 2
+    m = array.size(zzKind)
+    lastK = array.get(zzKind, m - 1)
+    lastP = array.get(zzPrice, m - 1)
+    prevP = array.get(zzPrice, m - 2)
+    recentLow  = lastK == 0 ? lastP : prevP
+    recentHigh = lastK == 1 ? lastP : prevP
+    if penHOn
+        penHref := recentLow
+    if penLOn
+        penLref := recentHigh
+
+// ── Label + garis level ───────────────────────────────────────────────────────
+var label[] itLbl = array.new_label()
+var line[]  itLn  = array.new_line()
+var int[]   itDir = array.new_int()    // 1 = ITH/LTH, 0 = ITL/LTL
+
+// Nama TF chart ringkas untuk suffix label (60→"1H", 240→"4H", "D", "W", 15→"15m").
+tfFriendly() =>
+    timeframe.isweekly ? "W" : timeframe.isdaily ? "D" : timeframe.isminutes ? (timeframe.multiplier % 60 == 0 ? str.tostring(timeframe.multiplier / 60) + "H" : str.tostring(timeframe.multiplier) + "m") : timeframe.period
+
+addIntermediate(int b, float piv, int dir) =>
+    base = timeframe.isweekly ? (dir == 1 ? "LTH" : "LTL") : (dir == 1 ? "ITH" : "ITL")
+    lblText = base + " " + tfFriendly()
+    lbl = if dir == 1
+        label.new(b, piv, lblText, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=colITH, textcolor=color.white, size=size.small)
+    else
+        label.new(b, piv, lblText, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=colITL, textcolor=color.black, size=size.small)
+    ln = if showLevels
+        line.new(b, piv, bar_index, piv, xloc=xloc.bar_index, color=(dir == 1 ? colITH : colITL), width=2)
+    else
+        na
+    array.push(itLbl, lbl)
+    array.push(itLn, ln)
+    array.push(itDir, dir)
+
+// Hapus entri level index i. Ambil id objek SEBELUM array.remove (index bergeser).
+// Statement terakhir if-tanpa-else → return void (cegah mismatch tipe di supersede).
+delLevel(int i) =>
+    lbl = array.get(itLbl, i)
+    ln  = array.get(itLn, i)
+    array.remove(itLbl, i)
+    array.remove(itLn, i)
+    array.remove(itDir, i)
+    label.delete(lbl)
+    if not na(ln)
+        line.delete(ln)
+
+// supersede(dir): dipanggil SEBELUM menambah level baru arah `dir`.
+//   · ITH/ITL: Old lama dihapus; active lama → "Old" + dipudarkan (maks 1 Old + 1 active).
+//   · LTL/LTH (weekly): semua level arah ini dihapus → cuma 1 anchor aktif per arah.
+supersede(int dir) =>
+    weekly = timeframe.isweekly
+    if array.size(itLbl) > 0
+        for i = array.size(itLbl) - 1 to 0
+            if array.get(itDir, i) == dir
+                if weekly
+                    delLevel(i)
+                else
+                    lbl = array.get(itLbl, i)
+                    t   = label.get_text(lbl)
+                    if str.startswith(t, "Old ")
+                        delLevel(i)                       // buang Old sebelumnya (sisakan 1)
+                    else
+                        label.set_text(lbl, "Old " + t)   // active lama → Old + pudar
+                        label.set_color(lbl, colBroken)
+                        label.set_textcolor(lbl, color.new(color.white, 25))
+                        ln = array.get(itLn, i)
+                        if not na(ln)
+                            line.set_color(ln, colBroken)
+                            line.set_style(ln, line.style_dashed)
+
+itlConfirmed = false
+ithConfirmed = false
+
+// Konfirmasi ITL: cek abort (low < trough) dulu, baru cek break STH ke atas
+if penLOn
+    if low < penLtr
+        penLOn := false
+    else if (breakBody ? close > penLref : high > penLref)
+        penLOn := false
+        itlConfirmed := true
+        supersede(0)
+        addIntermediate(penLbar, penLtr, 0)
+
+// Konfirmasi ITH: cek abort (high > peak) dulu, baru cek break STL ke bawah
+if penHOn
+    if high > penHpk
+        penHOn := false
+    else if (breakBody ? close < penHref : low < penHref)
+        penHOn := false
+        ithConfirmed := true
+        supersede(1)
+        addIntermediate(penHbar, penHpk, 1)
+
+// ── Weekly TF: anchor LTL / LTH (BUKAN mesin ITH/ITL). Dari zigzag yang sama:
+//   · LTL aktif = swing low terbaru yang masih DI BAWAH harga sekarang
+//   · LTH aktif = swing high terbaru yang masih DI ATAS harga sekarang
+// Anchor bergeser ikut struktur; yang lama dihapus → cuma 1 LTL & 1 LTH tampil.
+var int curLTLbar = na
+var int curLTHbar = na
+if timeframe.isweekly and array.size(zzKind) > 0
+    n = array.size(zzKind)
+    ltlBar = -1
+    ltlPx  = 0.0
+    foundL = false
+    for i = n - 1 to 0
+        if array.get(zzKind, i) == 0 and array.get(zzPrice, i) < close
+            ltlPx  := array.get(zzPrice, i)
+            ltlBar := array.get(zzBar, i)
+            foundL := true
+            break
+    lthBar = -1
+    lthPx  = 0.0
+    foundH = false
+    for i = n - 1 to 0
+        if array.get(zzKind, i) == 1 and array.get(zzPrice, i) > close
+            lthPx  := array.get(zzPrice, i)
+            lthBar := array.get(zzBar, i)
+            foundH := true
+            break
+    if foundL and (na(curLTLbar) or ltlBar != curLTLbar)
+        supersede(0)
+        addIntermediate(ltlBar, ltlPx, 0)
+        curLTLbar := ltlBar
+        itlConfirmed := true
+    if foundH and (na(curLTHbar) or lthBar != curLTHbar)
+        supersede(1)
+        addIntermediate(lthBar, lthPx, 1)
+        curLTHbar := lthBar
+        ithConfirmed := true
+
+// Maintenance: perpanjang semua garis level (active maupun "Old" yang dipudarkan)
+// ke bar sekarang supaya tetap jadi ray horizontal. Retensi (maks 1 Old + 1 active
+// per arah di ITH/ITL; 1 aktif per arah di LTL/LTH) sudah ditangani supersede().
+if array.size(itLn) > 0
+    for i = 0 to array.size(itLn) - 1
+        ln = array.get(itLn, i)
+        if not na(ln)
+            line.set_x2(ln, bar_index)
+
+// ── Zigzag visual (opsional) ──────────────────────────────────────────────────
+if showZigzag and pivotHappened and array.size(zzKind) >= 2
+    n = array.size(zzKind)
+    b1 = array.get(zzBar, n - 2)
+    p1 = array.get(zzPrice, n - 2)
+    b2 = array.get(zzBar, n - 1)
+    p2 = array.get(zzPrice, n - 1)
+    line.new(b1, p1, b2, p2, xloc=xloc.bar_index, color=color.new(color.blue, 50), width=1)
+
+// ── Tanda STH/STL terakhir (garis kecil ke samping di tiap pivot 3-bar) ─────────
+// Pakai pivot mentah ph/pl (= STH/STL 3-bar AMS). Pivot terkonfirmasi rightBars
+// candle ke belakang → garis dimulai di bar pivot, bukan bar konfirmasi.
+var line[] sthDots = array.new_line()
+var line[] stlDots = array.new_line()
+if showDots and not timeframe.isweekly
+    if not na(ph)
+        pb = bar_index - rightBars
+        array.push(sthDots, line.new(pb, ph, pb + dotsLen, ph, xloc=xloc.bar_index, color=colITH, width=1, style=line.style_dotted))
+        if array.size(sthDots) > dotsN
+            line.delete(array.shift(sthDots))
+    if not na(pl)
+        pb = bar_index - rightBars
+        array.push(stlDots, line.new(pb, pl, pb + dotsLen, pl, xloc=xloc.bar_index, color=colITL, width=1, style=line.style_dotted))
+        if array.size(stlDots) > dotsN
+            line.delete(array.shift(stlDots))
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// QT FRACTAL (Quarterly Theory) — visual fraktal, level dipilih dari TF chart.
+//   5m → Session  (1 sesi 6h → 4× quarter 90m)
+//   15m→ Daily    (1 hari 18:00→18:00 NY → 4 sesi: Asia/London/NY-AM/PM)
+//   1H → Mingguan (1 minggu → hari: Sen/Sel/Rab/Kam Q1–Q4, Jumat = blok special)
+//   4H → Bulanan  (1 bulan → 4 minggu trading penuh; minggu ke-5 = blok special)
+//   >4H→ off (Daily ke atas tak menampilkan QT)
+//   Tiap quarter peran AMD: Q1 Akumulasi, Q2 Manipulasi, Q3 Distribusi, Q4 Kelanjutan.
+//   Label berwarna di pojok kanan-bawah kotak: periode + quarter + FASE AMD (A/M/D/X). Skenario
+//   AMDX/XAMD diklasifikasi tiap siklus dari Q1: true-move |close−open| Q1 ≥ qtAmdMult×ATR
+//   → X (XAMD), selain itu A (AMDX) — TANPA syarat FVG (mirror engine AsiaRequireFVG=false).
+//   Anchor jam NEW YORK (DST-aware). DISPLAY-ONLY. Mirror anchor waktu engine: SessionStart
+//   18/00/06/12 NY; trading-day & trading-week buka 18:00 NY.
+//   ⚠️ QT Bulanan: Q1 = minggu SENIN PERTAMA bulan itu (anchor Min 18:00 NY), lalu Q2/Q3/Q4
+//     minggu berikutnya. BEDA dari weekOfMonthNY engine (yg pakai tanggal 1–7/8–14/…).
+//   ⚠️ ATR penentu AMD dihitung di TF chart → pendekatan, bisa drift dari sub-TF engine.
+// ═══════════════════════════════════════════════════════════════════════════════
+QT_TZ     = "America/New_York"
+QT_DAY_MS = 86400000      // 24 jam (ms)
+QT_WK_MS  = 604800000     // 7 hari (ms)
+QT_Q90_MS = 5400000       // 90 menit (ms)
+
+// Level aktif (0=off, 1=Session, 2=Daily, 3=Mingguan, 4=Bulanan).
+qtLevel() =>
+    s = timeframe.in_seconds()
+    auto = s <= 300 ? 1 : s <= 900 ? 2 : s <= 3600 ? 3 : s <= 14400 ? 4 : 0
+    qtLevelOpt == "Session" ? 1 : qtLevelOpt == "Daily" ? 2 : qtLevelOpt == "Mingguan" ? 3 : qtLevelOpt == "Bulanan" ? 4 : auto
+
+// SessionStart (18/00/06/12 NY) yang memuat t — mirror detectors.SessionStart.
+qtSessStart(int t) =>
+    h = hour(t, QT_TZ)
+    sh = h >= 18 ? 18 : h < 6 ? 0 : h < 12 ? 6 : 12
+    timestamp(QT_TZ, year(t, QT_TZ), month(t, QT_TZ), dayofmonth(t, QT_TZ), sh, 0)
+
+// TradingDayStart (18:00 NY) yang memuat t — mirror detectors.TradingDayStart.
+qtDayStart(int t) =>
+    h = hour(t, QT_TZ)
+    base = timestamp(QT_TZ, year(t, QT_TZ), month(t, QT_TZ), dayofmonth(t, QT_TZ), 18, 0)
+    if h < 18
+        p = t - 18 * 3600000
+        base := timestamp(QT_TZ, year(p, QT_TZ), month(p, QT_TZ), dayofmonth(p, QT_TZ), 18, 0)
+    base
+
+// Awal trading-week (Minggu 18:00 NY) yang memuat t.
+qtWeekStart(int t) =>
+    dow = dayofweek(t, QT_TZ)              // 1=Minggu ... 7=Sabtu
+    sunMs = t - (dow - 1) * QT_DAY_MS      // mundur ke (kira-kira) Minggu
+    s18 = timestamp(QT_TZ, year(sunMs, QT_TZ), month(sunMs, QT_TZ), dayofmonth(sunMs, QT_TZ), 18, 0)
+    if t < s18                             // t = Minggu sebelum 18:00 → minggu sebelumnya
+        p = t - QT_WK_MS
+        dow2 = dayofweek(p, QT_TZ)
+        s2 = p - (dow2 - 1) * QT_DAY_MS
+        s18 := timestamp(QT_TZ, year(s2, QT_TZ), month(s2, QT_TZ), dayofmonth(s2, QT_TZ), 18, 0)
+    s18
+
+// Anchor siklus bulanan M = awal trading-week (Minggu 18:00 NY) dari minggu yang memuat
+// SENIN PERTAMA bulan M. (mis. Senin pertama 4 Feb → Q1 mulai dari minggu Senin itu; tgl
+// SEBELUM Senin pertama = milik siklus bulan sebelumnya.)
+qtMonthAnchor(int y, int mo) =>
+    dow1 = dayofweek(timestamp(QT_TZ, y, mo, 1, 12, 0), QT_TZ)   // 1=Minggu..7=Sabtu utk tgl 1
+    fmDay = 1 + int((2 - dow1 + 7) % 7)                          // tanggal Senin pertama (1..7)
+    qtWeekStart(timestamp(QT_TZ, y, mo, fmDay, 12, 0))
+
+// Awal siklus bulanan yang memuat t (tiling kontigu [anchor(M), anchor(M+1))).
+qtMonthCycleStart(int t) =>
+    y = year(t, QT_TZ)
+    mo = month(t, QT_TZ)
+    aThis = qtMonthAnchor(y, mo)
+    cs = aThis
+    if t < aThis
+        py = mo == 1 ? y - 1 : y
+        pmo = mo == 1 ? 12 : mo - 1
+        cs := qtMonthAnchor(py, pmo)            // sebelum Senin pertama → siklus bulan lalu
+    else
+        ny = mo == 12 ? y + 1 : y
+        nmo = mo == 12 ? 1 : mo + 1
+        aNext = qtMonthAnchor(ny, nmo)
+        if t >= aNext
+            cs := aNext                         // sudah lewat Senin pertama bulan depan
+    cs
+
+// Awal siklus level aktif yang memuat t.
+qtCycleStart(int lvl, int t) =>
+    lvl == 2 ? qtDayStart(t) : lvl == 3 ? qtWeekStart(t) : lvl == 4 ? qtMonthCycleStart(t) : qtSessStart(t)
+
+// Index quarter (0..4) di dalam siklus; -1 = di luar (weekend/jeda). 4 = blok special.
+qtQuarter(int lvl, int t) =>
+    q = -1
+    if lvl == 1
+        q := int(math.floor((t - qtSessStart(t)) / QT_Q90_MS))
+        q := q < 0 ? 0 : q > 3 ? 3 : q
+    else if lvl == 2
+        h = hour(t, QT_TZ)
+        q := h >= 18 ? 0 : h < 6 ? 1 : h < 12 ? 2 : 3
+    else if lvl == 3
+        off = int(math.round((qtDayStart(t) - qtWeekStart(t)) / QT_DAY_MS))
+        q := off < 0 ? -1 : off <= 4 ? off : -1
+    else if lvl == 4
+        off = int(math.round((qtWeekStart(t) - qtMonthCycleStart(t)) / QT_WK_MS))
+        q := off < 0 ? -1 : off <= 3 ? off : off == 4 ? 4 : -1
+    q
+
+// Awal jendela tampil = mundur N siklus dari siklus bar terakhir (last_bar_time stabil).
+// cs-1 ms selalu jatuh di siklus sebelumnya → robust untuk DST & siklus variabel.
+qtWindowStart(int lvl, int n) =>
+    cs = qtCycleStart(lvl, last_bar_time)
+    i = 1
+    while i < n
+        cs := qtCycleStart(lvl, cs - 1)
+        i += 1
+    cs
+
+qtSessName(int s) =>
+    s == 0 ? "Asia" : s == 1 ? "London" : s == 2 ? "NY-AM" : "PM"
+
+// Label netral: nama periode + nomor quarter (atau "sp" untuk blok special).
+qtLabelText(int lvl, int t, int q) =>
+    out = ""
+    if lvl == 1
+        h = hour(t, QT_TZ)
+        sn = h >= 18 ? "Asia" : h < 6 ? "London" : h < 12 ? "NY-AM" : "PM"
+        out := sn + " · Q" + str.tostring(q + 1)
+    else if lvl == 2
+        out := qtSessName(q) + " · Q" + str.tostring(q + 1)
+    else if lvl == 3
+        dn = q == 0 ? "Senin" : q == 1 ? "Selasa" : q == 2 ? "Rabu" : q == 3 ? "Kamis" : "Jumat"
+        out := q <= 3 ? dn + " · Q" + str.tostring(q + 1) : dn + " · sp"
+    else
+        out := q <= 3 ? "Mg" + str.tostring(q + 1) + " · Q" + str.tostring(q + 1) : "Mg5 · sp"
+    out
+
+// Huruf fase AMD untuk quarter q (0..3) berdasar skenario siklus (Q1 fractal):
+//   AMDX (scen=0): Q1=A Q2=M Q3=D Q4=X   |   XAMD (scen=1): Q1=X Q2=A Q3=M Q4=D
+// "" untuk blok special (q>=4) atau skenario belum diketahui (scen<0). Mirror detectors.DailyPhase.
+qtPhaseLetter(int scen, int q) =>
+    q >= 4 or scen < 0 ? "" : scen == 1 ? (q == 0 ? "X" : q == 1 ? "A" : q == 2 ? "M" : "D") : (q == 0 ? "A" : q == 1 ? "M" : q == 2 ? "D" : "X")
+
+// Warna per FASE AMD (A/M/D/X) → mudah dibedakan; "" / lainnya = abu netral (Q1 belum
+// terklasifikasi atau blok special).
+qtPhaseCol(string p) =>
+    p == "A" ? qtColA : p == "M" ? qtColM : p == "D" ? qtColD : p == "X" ? qtColX : color.gray
+
+// ── Eksekusi per-bar (kotak tipis per quarter + label) ─────────────────────────
+lvlNow    = qtLevel()
+qtLvlSafe = lvlNow > 0 ? lvlNow : 1                       // hindari panggilan fungsi tak konsisten
+qtWinStartRaw = qtWindowStart(qtLvlSafe, qtN)            // dipanggil tiap bar (nilai konstan: dari last_bar_time)
+qtWinStart = showQT ? qtWinStartRaw : na
+qtQ  = qtQuarter(qtLvlSafe, time)
+qtCs = qtCycleStart(qtLvlSafe, time)
+qtInWin  = showQT and lvlNow > 0 and not na(qtWinStart) and time >= qtWinStart and qtQ >= 0
+qtIsStart = qtInWin and (qtQ != qtQ[1] or qtCs != qtCs[1])
+
+// Kotak tipis per quarter (rentang waktu × range harga high–low candle quarter →
+// "ngepas" chart) + LABEL penentuan: bubble berlatar warna quarter (gaya ITH/ITL),
+// ditaruh di TENGAH-ATAS tiap kotak. Teks = periode + quarter + FASE AMD (A/M/D/X).
+// Streaming: quarter baru → box+label baru; berjalan → perpanjang box & re-center label.
+//
+// AMDX/XAMD: tiap siklus dari Q1 — true-move |close−open| Q1 ≥ qtAmdMult×ATR_chart → X
+// (XAMD), selain itu A (AMDX). TANPA syarat FVG (mirror engine AsiaRequireFVG=false).
+// ⚠️ ATR di TF chart → pendekatan, bisa drift dari sub-TF engine (M15/H1/H4).
+var box[]   qtBoxes     = array.new_box()
+var label[] qtLabels    = array.new_label()
+var box     qtCurBox    = na
+var box     qtQ1Box     = na
+var label   qtCurLbl    = na
+var label   qtQ1Lbl     = na
+var string  qtQ1Base    = na
+var float   qtCurHi     = na
+var float   qtCurLo     = na
+var int     qtCurStartT = na
+var float   qtQ1Open    = na
+var int     qtScen      = -1     // -1=belum tahu, 0=AMDX, 1=XAMD
+qtCap = qtN * 6 + 6
+if qtInWin
+    // Siklus baru → reset skenario; Q1 open = open bar pertama siklus.
+    if qtCs != qtCs[1]
+        qtScen := -1
+        qtQ1Open := open
+    // Q1 selesai (quarter pindah dari 0, masih siklus sama) → klasifikasi AMDX/XAMD.
+    if qtQ != 0 and qtQ[1] == 0 and qtCs == qtCs[1] and qtScen == -1
+        tm = math.abs(close[1] - qtQ1Open)
+        atrRef = nz(atrVal[1])
+        qtScen := (atrRef > 0 and tm >= qtAmdMult * atrRef) ? 1 : 0
+        q1Letter = qtPhaseLetter(qtScen, 0)
+        q1Col = qtPhaseCol(q1Letter)
+        if not na(qtQ1Box)
+            box.set_border_color(qtQ1Box, color.new(q1Col, 15))
+            if qtFill
+                box.set_bgcolor(qtQ1Box, color.new(q1Col, qtTransp))
+        if qtShowLbl and not na(qtQ1Lbl) and not na(qtQ1Base)
+            label.set_text(qtQ1Lbl, qtQ1Base + " · " + q1Letter)
+            label.set_color(qtQ1Lbl, color.new(q1Col, 10))
+    startNew = qtIsStart and (na(qtCurStartT) or qtCurStartT != time)
+    if startNew
+        qtCurHi := high
+        qtCurLo := low
+        qtCurStartT := time
+        baseTxt = qtLabelText(lvlNow, time, qtQ)
+        phl = qtPhaseLetter(qtScen, qtQ)
+        pcol = qtPhaseCol(phl)
+        qtCurBox := box.new(time, high, time, low, xloc=xloc.bar_time, border_color=color.new(pcol, 15), border_width=1, border_style=line.style_dotted, bgcolor=(qtFill ? color.new(pcol, qtTransp) : na))
+        array.push(qtBoxes, qtCurBox)
+        while array.size(qtBoxes) > qtCap
+            box.delete(array.shift(qtBoxes))
+        if qtQ == 0
+            qtQ1Box := qtCurBox
+        if qtShowLbl
+            lblTxt = phl == "" ? baseTxt : baseTxt + " · " + phl
+            qtCurLbl := label.new(time, qtCurLo - qtLblGap * nz(atrVal), lblTxt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_upper_right, color=color.new(pcol, 10), textcolor=color.white, size=size.tiny)
+            array.push(qtLabels, qtCurLbl)
+            while array.size(qtLabels) > qtCap
+                label.delete(array.shift(qtLabels))
+            if qtQ == 0
+                qtQ1Lbl := qtCurLbl
+                qtQ1Base := baseTxt
+    else if not na(qtCurBox)
+        qtCurHi := math.max(qtCurHi, high)
+        qtCurLo := math.min(qtCurLo, low)
+        box.set_top(qtCurBox, qtCurHi)
+        box.set_bottom(qtCurBox, qtCurLo)
+        box.set_right(qtCurBox, time)
+        if qtShowLbl and not na(qtCurLbl)
+            label.set_xy(qtCurLbl, time, qtCurLo - qtLblGap * nz(atrVal))   // ikut tepi kanan-bawah kotak
+
+// ── Alert ──────────────────────────────────────────────────────────────────────
+alertcondition(itlConfirmed, "ITL / LTL terkonfirmasi", "ITL / LTL terkonfirmasi")
+alertcondition(ithConfirmed, "ITH / LTH terkonfirmasi", "ITH / LTH terkonfirmasi")
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODUL B — PD ARRAY (komponen Array terdekat ke harga, multi-TF H1+H4+D)
+//   Mereplikasi deteksi komponen PD Array Layer F engine (marketprim.go + pdarray.go).
+//   ⚠️ DRIFT SENGAJA: Pine hitung ULANG sendiri, TIDAK baca watchlist engine (Pine tak
+//   bisa import data luar). Tanpa clustering → komponen PDR individual, BUKAN POI
+//   tier/confluence. "Valid" = komponen belum dijebol harga; tanpa gate cluster &
+//   filter zona Fib. FVGBreak ditampilkan H1+H4+D (H4 via input fvgBreakH4 default ON —
+//   DRIFT SENGAJA: engine FVGBreakTFs="H1,D" strip H4 utk trading, Pine tampilkan utk visual).
+//   BB vs OB dipisah via liquidity sweep swing lama (BB=continuation tanpa sweep, OB=reversal
+//   ada sweep — mirror konsep engine detectBBs vs detectOBsStrict).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Input PD Array ─────────────────────────────────────────────────────────────
+nPerDir   = input.int(3, "Jumlah komponen terdekat per arah", minval=1, maxval=10, group="PD Array — Seleksi")
+showOB    = input.bool(false, "Tampilkan OB (reversal)", group="PD Array — Seleksi", tooltip="OFF (default): sembunyikan komponen OB (order block reversal). Deteksi BB/OB tetap jalan; hanya render OB yang disembunyikan.")
+showAllTF = input.bool(false, "Tampilkan SEMUA TF PD Array (default: hanya TF chart yang dibuka)", group="PD Array — Timeframe", tooltip="OFF (default): hanya gambar PD Array TF yang cocok dengan timeframe chart sekarang (H1→H1, H4→H4, Daily→Daily). ON: gambar semua TF yang dicentang di bawah (H1/H4/Daily).")
+showH1    = input.bool(true,  "  ↳ TF H1 (saat 'semua TF' ON)",  group="PD Array — Timeframe")
+showH4    = input.bool(true,  "  ↳ TF H4 (saat 'semua TF' ON)",  group="PD Array — Timeframe")
+showD     = input.bool(true,  "  ↳ TF Daily (saat 'semua TF' ON)", group="PD Array — Timeframe")
+fvgBreakH4 = input.bool(true, "FVGBreak juga di H4", group="PD Array — Timeframe", tooltip="ON (default Pine): tampilkan FVGBreak di H4 juga. ⚠️ DRIFT SENGAJA dari engine — engine FVGBreakTFs=\"H1,D\" men-strip H4 (OOS merugikan utk TRADING). Untuk visualisasi tetap ditampilkan. OFF = mirror engine (FVG H4 jadi FVG biasa).")
+
+fvgMinUsd = input.float(0.5,  "FVG gap minimal ($)", minval=0.0, step=0.1, group="PD Array — Ambang deteksi", tooltip="Engine: MinGapPips=5 → $0.50 untuk Gold.")
+viMinUsd  = input.float(1.5,  "VI gap minimal ($)",  minval=0.0, step=0.1, group="PD Array — Ambang deteksi", tooltip="Engine: VIMinGapPips=15 → $1.50 (3× FVG, hindari banjir).")
+bprMaxC   = input.int(5,   "BPR jarak FVG maks (candle)", minval=1, group="PD Array — Ambang deteksi")
+fvgBrkAdj = input.int(12,  "FVGBreak adjacency swing (candle)", minval=1, group="PD Array — Ambang deteksi", tooltip="Engine: FVGSwingBreakAdjacency=12. FVG di-promosi FVGBreak hanya bila ada swing 3-bar sejenis (high→bull, low→bear) dalam jarak ini yg HARGANYA sudah ditembus (BOS). Pivot swing fixed 3-bar (1,1) mirror engine DetectSwings.")
+pdMaxZ    = input.int(50, "Maks zona disimpan per TF", minval=20, maxval=1000, group="PD Array — Ambang deteksi", tooltip="Ring buffer: simpan hanya N zona terbaru per TF (buang yang paling lama). Cegah 'memory limit exceeded' di H1 panjang. Naikkan kalau ingin jangkau zona lebih lama, turunkan kalau berat.")
+pdMaxBack = input.int(5000, "Maks bar lookback deteksi", minval=500, maxval=50000, group="PD Array — Ambang deteksi", tooltip="Detektor PD Array HANYA mengakumulasi zona pada N bar terakhir. Ini lever utama lawan 'memory limits exceeded': memori ≈ (total bar chart) × jumlah zona × 15 array — guard ini memotong faktor 'total bar' jadi N. Turunkan kalau masih berat (mis. 2000), naikkan kalau ingin zona dari lebih jauh ke belakang. Swing tracking tetap jalan penuh; hanya push zona yang dibatasi.")
+
+colBull   = input.color(color.lime, "Warna komponen bullish (buy)", group="PD Array — Tampilan")
+colBear   = input.color(color.red,  "Warna komponen bearish (sell)", group="PD Array — Tampilan")
+baseTransp= input.int(72, "Transparansi isi terdekat", minval=0, maxval=95, group="PD Array — Tampilan")
+fadeStep  = input.int(7,  "Tambahan transparansi per peringkat", minval=0, maxval=20, group="PD Array — Tampilan", tooltip="Komponen yang lebih jauh ('yang kemarin') makin pudar.")
+showPDLabel = input.bool(true, "Tampilkan label (TF + jenis)", group="PD Array — Tampilan")
+
+// Kode jenis komponen: 0=FVG 1=FVGBrk 2=VI 3=BB 4=BPR 5=OB
+kindName(int k) =>
+    k == 0 ? "FVG" : k == 1 ? "FVGBrk" : k == 2 ? "VI" : k == 3 ? "BB" : k == 5 ? "OB" : "BPR"
+
+// Tier F.1 per jenis (angka kecil = tier lebih tinggi) — mirror engine tierOf():
+// VI=1, FVGBreak=2, BB/BPR/OB=3, FVG=4. OB menggantikan slot BB (mutually-exclusive) →
+// tier sama dgn BB agar visibilitas dedup identik. Dipakai dedup tier-aware di drawTF.
+tierOfKind(int k) =>
+    k == 2 ? 1 : k == 1 ? 2 : (k == 3 or k == 4 or k == 5) ? 3 : 4
+
+// Push pivot ke struktur STH/STL alternating (arrays by-reference; mirror pushZZ modul
+// atas, tanpa filter ATR). Sama-arah dgn STH/STL terakhir → update ke yang lebih ekstrem.
+// Lawan-arah → STH/STL baru.
+pushSwingStruct(float[] px_, int[] kind_, int[] bar_, float px, int kind, int b) =>
+    n = array.size(kind_)
+    if n == 0
+        array.push(px_, px)
+        array.push(kind_, kind)
+        array.push(bar_, b)
+    else
+        lastK = array.get(kind_, n - 1)
+        lastP = array.get(px_, n - 1)
+        if kind == lastK
+            if (kind == 1 and px > lastP) or (kind == 0 and px < lastP)
+                array.set(px_, n - 1, px)
+                array.set(bar_, n - 1, b)
+        else
+            array.push(px_, px)
+            array.push(kind_, kind)
+            array.push(bar_, b)
+
+// ── Detektor: jalan di KONTEKS TF target (dipanggil via request.security) ──────
+// Mengembalikan 5 array paralel zona "live" (belum dijebol): top, bottom,
+// dir(1=bull/0=bear), kind, waktu-anchor(ms). Akumulasi via `var`, prune saat jebol.
+detectArrays(float fvgMin, float viMin, int bprMax, int brkAdj, bool fvgBreakTF, int maxZ, int maxBack) =>
+    // Guard lookback: hanya akumulasi zona pada `maxBack` bar terakhir. Memotong
+    // faktor "total bar chart" pada memori array-series request.security (lihat
+    // tooltip pdMaxBack). Swing tracking tetap jalan penuh (scalar, tak tumbuh).
+    withinLookback = (last_bar_index - bar_index) <= maxBack
+    var float[] zTop  = array.new_float()
+    var float[] zBot  = array.new_float()
+    var int[]   zDir  = array.new_int()
+    var int[]   zKind = array.new_int()
+    var int[]   zTime = array.new_int()
+
+    // Catatan FVG geometris terbaru (untuk pasangan BPR). Index = bar_index TF.
+    var float[] fTop = array.new_float()
+    var float[] fBot = array.new_float()
+    var int[]   fDir = array.new_int()
+    var int[]   fIdx = array.new_int()
+
+    // ── Pelacakan STH/STL untuk FVGBreak — KOREKSI 2026-06-11 (keputusan user):
+    // swing yang di-break HARUS berupa STH/STL STRUKTURAL = zigzag alternating high-low
+    // (sama dgn modul ITH/ITL), BUKAN semua pivot 3-bar mentah. Pivot minor yg bukan bagian
+    // struktur alternating di-merge (ambil yg paling ekstrem). Hanya simpan level+bar; status
+    // "broken" TAK dilacak lagi — FVGBreak dinilai GEOMETRIS saat FVG terbentuk (lihat bawah).
+    // Prune STH/STL yg sudah terlalu jauh (tak mungkin adjacent ke FVG mana pun lagi).
+    // ⚠️ DRIFT SENGAJA dari engine detectFVGSwingBreaks (engine masih SEMUA pivot 3-bar + flag broken).
+    var float[] swPx   = array.new_float()
+    var int[]   swBar  = array.new_int()
+    var int[]   swKind = array.new_int()    // 1=STH, 0=STL
+
+    phF = ta.pivothigh(1, 1)
+    plF = ta.pivotlow(1, 1)
+    if not na(phF)
+        pushSwingStruct(swPx, swKind, swBar, phF, 1, bar_index - 1)
+    if not na(plF)
+        pushSwingStruct(swPx, swKind, swBar, plF, 0, bar_index - 1)
+    // Prune swing terlalu lama (front = tertua; swBar monotonik naik).
+    // CATATAN: Pine `and` TIDAK short-circuit — array.get harus di-guard di DALAM
+    // badan while (saat size dijamin >0), bukan di kondisi `size>0 and array.get(...)`.
+    pruneMore = array.size(swBar) > 0
+    while pruneMore
+        if (bar_index - array.get(swBar, 0)) > brkAdj + 4
+            array.shift(swPx)
+            array.shift(swBar)
+            array.shift(swKind)
+            pruneMore := array.size(swBar) > 0
+        else
+            pruneMore := false
+
+    // ── FVG: triple bar[3]=first, bar[2]=mid, bar[1]=third (konfirmasi, non-repaint).
+    fvgIdx = bar_index - 2          // index candle tengah (acuan engine)
+    fvgTm  = time[2]
+    // Prune riwayat FVG-geometris di luar jendela BPR (BPR cuma pasangkan ≤bprMax candle) →
+    // cegah loop BPR jadi kuadratik di chart panjang. front=tertua (fIdx monotonik naik).
+    pruneF = array.size(fIdx) > 0
+    while pruneF
+        if (fvgIdx - array.get(fIdx, 0)) > bprMax
+            array.shift(fTop)
+            array.shift(fBot)
+            array.shift(fDir)
+            array.shift(fIdx)
+            pruneF := array.size(fIdx) > 0
+        else
+            pruneF := false
+    if withinLookback and low[1] > high[3] and (low[1] - high[3]) >= fvgMin
+        // Bullish FVG: bottom=high candle pertama, top=low candle ketiga.
+        b = high[3]
+        t = low[1]
+        // FVGBreak bullish (def user 2026-06-11): ada STH (swing-high) yg TERBENTUK ≤brkAdj
+        // candle SEBELUM FVG & level-nya JATUH DI DALAM zona FVG [b,t] → displacement pembentuk
+        // FVG menembus/melahap STH itu (BOS). Geometris — tak perlu flag broken.
+        isBrk = false
+        if fvgBreakTF and array.size(swKind) > 0
+            for s = 0 to array.size(swKind) - 1
+                d = fvgIdx - array.get(swBar, s)
+                if array.get(swKind, s) == 1 and d >= 0 and d <= brkAdj
+                    swp = array.get(swPx, s)
+                    if swp >= b and swp <= t
+                        isBrk := true
+                        break
+        array.push(zTop, t)
+        array.push(zBot, b)
+        array.push(zDir, 1)
+        array.push(zKind, isBrk ? 1 : 0)
+        array.push(zTime, fvgTm)
+        // catat utk BPR + BB nanti (sebagai FVG geometris)
+        array.push(fTop, t)
+        array.push(fBot, b)
+        array.push(fDir, 1)
+        array.push(fIdx, fvgIdx)
+        // BPR: cari FVG bearish dalam bprMax candle. Overlap = syarat SAH; zona = FVG TERBARU
+        // PENUH [b,t] (= FVG bull sekarang), bukan irisan. Arah = FVG lebih baru (=bull).
+        // ⚠️ DRIFT SENGAJA dari engine (engine pakai zona irisan; zona-penuh diuji & merugikan P&L).
+        if array.size(fDir) > 0
+            for j = array.size(fDir) - 1 to 0
+                if array.get(fDir, j) == 0 and (fvgIdx - array.get(fIdx, j)) <= bprMax and (fvgIdx - array.get(fIdx, j)) > 0
+                    bb = math.max(b, array.get(fBot, j))   // cek overlap saja (syarat BPR sah)
+                    tt = math.min(t, array.get(fTop, j))
+                    if bb < tt
+                        array.push(zTop, t)                // zona = FVG terbaru penuh
+                        array.push(zBot, b)
+                        array.push(zDir, 1)
+                        array.push(zKind, 4)
+                        array.push(zTime, fvgTm)
+                        break
+        // BB (continuation) vs OB (reversal) bullish: candle bearish 4..6 bar lalu + displacement
+        // (FVG top > high candle). OB bila SEBELUM reversal ada SWEEP swing-low lama (likuiditas
+        // diambil → balik arah) — mirror engine detectOBsStrict; selain itu BB (mirror detectBBs).
+        // ⚠️ DRIFT SENGAJA: engine detectBBs default TAK pisah OB (andalkan state-machine OF).
+        for o = 4 to 6
+            if close[o] < open[o] and t > high[o]
+                obBar = bar_index - o
+                float swpLvl = na
+                if array.size(swKind) > 0
+                    for s = array.size(swKind) - 1 to 0
+                        if array.get(swKind, s) == 0 and array.get(swBar, s) < obBar
+                            swpLvl := array.get(swPx, s)   // swing-low struktural terdekat SEBELUM candle OB
+                            break
+                // sweep = low candle OB menembus DI BAWAH swing-low lama (likuiditas diambil) → reversal/OB
+                isOB = not na(swpLvl) and low[o] < swpLvl
+                array.push(zTop, high[o])
+                array.push(zBot, low[o])
+                array.push(zDir, 1)
+                array.push(zKind, isOB ? 5 : 3)
+                array.push(zTime, time[o])
+                break
+    if withinLookback and high[1] < low[3] and (low[3] - high[1]) >= fvgMin
+        // Bearish FVG.
+        t = low[3]
+        b = high[1]
+        // FVGBreak bearish (def user 2026-06-11): ada STL (swing-low) yg TERBENTUK ≤brkAdj
+        // candle SEBELUM FVG & level-nya JATUH DI DALAM zona FVG [b,t] → displacement pembentuk
+        // FVG menembus/melahap STL itu (BOS). Geometris — tak perlu flag broken.
+        isBrk = false
+        if fvgBreakTF and array.size(swKind) > 0
+            for s = 0 to array.size(swKind) - 1
+                d = fvgIdx - array.get(swBar, s)
+                if array.get(swKind, s) == 0 and d >= 0 and d <= brkAdj
+                    swp = array.get(swPx, s)
+                    if swp >= b and swp <= t
+                        isBrk := true
+                        break
+        array.push(zTop, t)
+        array.push(zBot, b)
+        array.push(zDir, 0)
+        array.push(zKind, isBrk ? 1 : 0)
+        array.push(zTime, fvgTm)
+        array.push(fTop, t)
+        array.push(fBot, b)
+        array.push(fDir, 0)
+        array.push(fIdx, fvgIdx)
+        // BPR bearish: overlap = syarat SAH; zona = FVG TERBARU PENUH [b,t] (= FVG bear sekarang).
+        if array.size(fDir) > 0
+            for j = array.size(fDir) - 1 to 0
+                if array.get(fDir, j) == 1 and (fvgIdx - array.get(fIdx, j)) <= bprMax and (fvgIdx - array.get(fIdx, j)) > 0
+                    bb = math.max(b, array.get(fBot, j))   // cek overlap saja (syarat BPR sah)
+                    tt = math.min(t, array.get(fTop, j))
+                    if bb < tt
+                        array.push(zTop, t)                // zona = FVG terbaru penuh
+                        array.push(zBot, b)
+                        array.push(zDir, 0)
+                        array.push(zKind, 4)
+                        array.push(zTime, fvgTm)
+                        break
+        // BB vs OB bearish (simetris): candle bullish 4..6 bar lalu + displacement turun.
+        // OB bila SEBELUM reversal ada SWEEP swing-high lama; selain itu BB.
+        for o = 4 to 6
+            if close[o] > open[o] and b < low[o]
+                obBar = bar_index - o
+                float swpLvl = na
+                if array.size(swKind) > 0
+                    for s = array.size(swKind) - 1 to 0
+                        if array.get(swKind, s) == 1 and array.get(swBar, s) < obBar
+                            swpLvl := array.get(swPx, s)   // swing-high struktural terdekat SEBELUM candle OB
+                            break
+                // sweep = high candle OB menembus DI ATAS swing-high lama → reversal/OB
+                isOB = not na(swpLvl) and high[o] > swpLvl
+                array.push(zTop, high[o])
+                array.push(zBot, low[o])
+                array.push(zDir, 0)
+                array.push(zKind, isOB ? 5 : 3)
+                array.push(zTime, time[o])
+                break
+
+    // ── VI: 2 candle berurutan SEARAH dengan gap close→open (bar[2]→bar[1]).
+    viTm = time[1]
+    bullCandle1 = close[1] > open[1]
+    bullCandle2 = close[2] > open[2]
+    bearCandle1 = close[1] < open[1]
+    bearCandle2 = close[2] < open[2]
+    if withinLookback and open[1] > close[2] and bullCandle1 and bullCandle2 and (open[1] - close[2]) >= viMin
+        array.push(zTop, open[1])
+        array.push(zBot, close[2])
+        array.push(zDir, 1)
+        array.push(zKind, 2)
+        array.push(zTime, viTm)
+    if withinLookback and open[1] < close[2] and bearCandle1 and bearCandle2 and (close[2] - open[1]) >= viMin
+        array.push(zTop, close[2])
+        array.push(zBot, open[1])
+        array.push(zDir, 0)
+        array.push(zKind, 2)
+        array.push(zTime, viTm)
+
+    // ── Prune: buang catatan FVG geometris lama (>bprMax+1 bar) & zona yang dijebol.
+    if array.size(fIdx) > 0
+        for j = array.size(fIdx) - 1 to 0
+            if (bar_index - array.get(fIdx, j)) > bprMax + 1
+                array.remove(fTop, j)
+                array.remove(fBot, j)
+                array.remove(fDir, j)
+                array.remove(fIdx, j)
+    if array.size(zDir) > 0
+        for j = array.size(zDir) - 1 to 0
+            d = array.get(zDir, j)
+            // bullish dijebol kalau close di BAWAH bottom; bearish kalau close di ATAS top.
+            broken = d == 1 ? close < array.get(zBot, j) : close > array.get(zTop, j)
+            if broken
+                array.remove(zTop, j)
+                array.remove(zBot, j)
+                array.remove(zDir, j)
+                array.remove(zKind, j)
+                array.remove(zTime, j)
+
+    // ── Ring buffer: batasi jumlah zona (buang paling lama) → cegah memory limit.
+    while array.size(zDir) > maxZ
+        array.shift(zTop)
+        array.shift(zBot)
+        array.shift(zDir)
+        array.shift(zKind)
+        array.shift(zTime)
+
+    [zTop, zBot, zDir, zKind, zTime]
+
+// ── Tarik zona tiap TF (di konteks chart). FVGBreak hanya di H1 & D (engine: "H1,D").
+tid = syminfo.tickerid
+[h1t, h1b, h1d, h1k, h1m] = request.security(tid, "60",  detectArrays(fvgMinUsd, viMinUsd, bprMaxC, fvgBrkAdj, true,  pdMaxZ, pdMaxBack), lookahead=barmerge.lookahead_off)
+[h4t, h4b, h4d, h4k, h4m] = request.security(tid, "240", detectArrays(fvgMinUsd, viMinUsd, bprMaxC, fvgBrkAdj, fvgBreakH4, pdMaxZ, pdMaxBack), lookahead=barmerge.lookahead_off)
+[dt,  db,  dd,  dk,  dm ] = request.security(tid, "D",   detectArrays(fvgMinUsd, viMinUsd, bprMaxC, fvgBrkAdj, true,  pdMaxZ, pdMaxBack), lookahead=barmerge.lookahead_off)
+
+// ── Render: pilih N terdekat per arah lalu gambar box (dihapus & digambar ulang
+// tiap tick di bar terakhir). ───────────────────────────────────────────────
+var box[]   pdBoxes = array.new_box()
+var label[] pdLbls  = array.new_label()
+
+clearPD() =>
+    if array.size(pdBoxes) > 0
+        for i = 0 to array.size(pdBoxes) - 1
+            box.delete(array.get(pdBoxes, i))
+    array.clear(pdBoxes)
+    if array.size(pdLbls) > 0
+        for i = 0 to array.size(pdLbls) - 1
+            label.delete(array.get(pdLbls, i))
+    array.clear(pdLbls)
+
+// Jarak harga ke zona: 0 kalau di dalam, selisih ke tepi terdekat kalau di luar.
+zoneDist(float px, float t, float b) =>
+    px > t ? px - t : px < b ? b - px : 0.0
+
+drawTF(float[] aT, float[] aB, int[] aD, int[] aK, int[] aM, string tfName) =>
+    px = close
+    for dir = 0 to 1
+        // kumpulkan kandidat valid (belum jebol vs harga sekarang)
+        cand = array.new_int()
+        if array.size(aD) > 0
+            for i = 0 to array.size(aD) - 1
+                if array.get(aD, i) == dir
+                    t = array.get(aT, i)
+                    b = array.get(aB, i)
+                    valid = dir == 1 ? px >= b : px <= t
+                    if valid and (showOB or array.get(aK, i) != 5)
+                        array.push(cand, i)
+        // Dedup TIER-AWARE (mirror engine clusterTier): buang zona yg OVERLAP dgn zona
+        // searah ber-tier LEBIH TINGGI (mis. FVG ketiban BPR/FVGBreak) → area diwakili
+        // tier tertinggi, BPR tak lagi ke-label "FVG". Overlap = max(bot)<=min(top).
+        cand2 = array.new_int()
+        if array.size(cand) > 0
+            for p = 0 to array.size(cand) - 1
+                i = array.get(cand, p)
+                zt = array.get(aT, i)
+                zb = array.get(aB, i)
+                tri = tierOfKind(array.get(aK, i))
+                covered = false
+                for q = 0 to array.size(cand) - 1
+                    j = array.get(cand, q)
+                    if tierOfKind(array.get(aK, j)) < tri and math.max(zb, array.get(aB, j)) <= math.min(zt, array.get(aT, j))
+                        covered := true
+                        break
+                if not covered
+                    array.push(cand2, i)
+        // ambil nPerDir terdekat berurutan
+        rank = 0
+        while array.size(cand2) > 0 and rank < nPerDir
+            bestPos = -1
+            bestDist = 1.0e20
+            for p = 0 to array.size(cand2) - 1
+                i = array.get(cand2, p)
+                dd2 = zoneDist(px, array.get(aT, i), array.get(aB, i))
+                if dd2 < bestDist
+                    bestDist := dd2
+                    bestPos := p
+            bi = array.get(cand2, bestPos)
+            array.remove(cand2, bestPos)
+            col = dir == 1 ? colBull : colBear
+            tr = math.min(95, baseTransp + rank * fadeStep)
+            bx = box.new(array.get(aM, bi), array.get(aT, bi), time, array.get(aB, bi), xloc=xloc.bar_time, border_color=color.new(col, math.min(95, tr + 10)), bgcolor=color.new(col, tr), border_width=1)
+            array.push(pdBoxes, bx)
+            if showPDLabel
+                // Text di DALAM kotak: anchor di tepi kanan (bar sekarang), bubble
+                // tumbuh ke KIRI (style_label_left) + y di tengah-tinggi kotak → rapi,
+                // tak menyembul keluar seperti style up/down lama.
+                midY = (array.get(aT, bi) + array.get(aB, bi)) / 2
+                lb = label.new(time, midY, tfName + " " + kindName(array.get(aK, bi)), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(col, 20), textcolor=color.white, size=size.small)
+                array.push(pdLbls, lb)
+            rank += 1
+
+// TF chart sekarang → cocokkan ke H1 / H4 / Daily.
+isH1chart = timeframe.isminutes and timeframe.multiplier == 60
+isH4chart = timeframe.isminutes and timeframe.multiplier == 240
+isDchart  = timeframe.isdaily
+// Default: hanya TF chart yang dibuka. 'Semua TF' ON → ikut centang showH1/H4/D.
+renderH1 = showAllTF ? showH1 : isH1chart
+renderH4 = showAllTF ? showH4 : isH4chart
+renderD  = showAllTF ? showD  : isDchart
+
+if barstate.islast
+    clearPD()
+    if renderH1
+        drawTF(h1t, h1b, h1d, h1k, h1m, "H1")
+    if renderH4
+        drawTF(h4t, h4b, h4d, h4k, h4m, "H4")
+    if renderD
+        drawTF(dt, db, dd, dk, dm, "Daily")
