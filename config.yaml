@@ -1,0 +1,114 @@
+# config.yaml — parameter engine backtest (mirror engine.DefaultConfig()).
+#
+# Dibaca oleh internal/config.Load (flat-YAML subset, std-lib only — TANPA lib
+# YAML eksternal). Format: "key: value" per baris, komentar "#", baris kosong
+# diabaikan. Key snake_case dipetakan ke field Config (engine.go). Key tak
+# dikenal → warning + diabaikan; tipe salah → error.
+#
+# Pakai:  go run ./cmd/backtest -config config.yaml [-flag override lain]
+# Tanpa -config = engine.DefaultConfig() (nilai di file ini = default).
+
+# --- Deteksi PD Array ---
+min_gap_pips: 5                 # fvg_min_gap_pips_gold ($0.50) — ambang FVG
+vi_min_gap_pips: 15             # Volume Imbalance threshold (3× FVG = $1.50)
+poi_max_width_atr_mult: 0.5     # cap lebar cluster POI = N×ATR_H1 (0 = tanpa cap)
+fvg_swing_break_adjacency: 12   # Kunci #1: FVG ≤N candle dari swing break → Tier-2 (LOCK 2026-06-04: puncak kurva IS+OOS, +7R OOS vs adj=3, PF/DD datar; saturasi ≥15)
+fvg_break_geometric: false      # OFF (default). true = penentuan FVGBreak geometris (STH/STL struktural + level di DALAM zona FVG; mirror Pine). OOS-DOMINATED 2026-06-11 (IS/OOS −34R/−29R, PF & DD lebih buruk di semua adj) → opt-in utk re-eval -from 2018
+fvg_break_tfs: H1,D             # promosi Tier-2 FVGBreak hanya H1+D (strip H4+W); LOCK 2026-06-04 (OOS-dominan: R terjaga, PF 2.05→2.08, DD 8.9→6.2%). Kosong = semua TF
+bpr_max_distance_candles: 5     # BPR: BISI+SIBI overlap dalam ≤N candle
+confluence_min: 2               # POI confluence minimum (strict overlap)
+break_type: wick                # itl_ith_break_type: wick | body
+atr_period: 14                  # periode ATR
+min_atr_mult: 1.5               # QT directional close threshold (× ATR) — dipakai mode "atr"
+asia_ax_mode: atr               # detektor Asia A/X: atr (D.2, default) | ratio | range
+asia_range_ratio: 0.5           # ambang X di mode "ratio": true-move/range-sesi >= ini → X
+asia_require_fvg: false         # DEFAULT OFF: X = penentu murni true-move; FVG jadi catatan
+asia_gap_anchor: true           # DEFAULT ON: true-move Asia D.2 di-anchor ke close candle SEBELUM sesi (gap/Volume Imbalance ikut dihitung), bukan open
+q1_ax_mode: atr                 # klasifikasi A/X Q1 sesi (watchlist/alert): atr | range | ratio
+q1_range_ratio: 0.3             # ambang X mode "ratio" Q1: directional/range >= ini → X
+q1_gap_anchor: true             # DEFAULT ON: true-move Q1 sesi di-anchor ke close candle SEBELUM sesi (gap/Volume Imbalance), bukan open
+min_retrace_pct: 0.50           # swing_validity_min_retrace_pct (Rule of 0.5)
+h1_window: 300                  # rolling window candle H1 untuk POI/ITH-ITL
+m5_day_window: true             # batasi M5 entry-trigger ke trading-day berjalan
+poi_touch_window_bars: 4        # POI valid kalau disentuh dalam N candle H1 terakhir (0=point-in-time); 2→4 user 2026-06-03 (lever volume, OOS +18% R/PF2.19)
+entry_fresh_bars: 1             # konfirmasi 5m harus dalam N candle H1 terakhir (0 = retrospektif)
+
+# --- Magnitude filter swing ---
+min_swing_pips_m5: 0            # filter ITL/ITH 5m trigger (pip gold; 0 = off)
+min_swing_atr_mult_htf: 1.0     # filter zigzag HTF anchor Fibo (× ATR sumber; 0 = off)
+marks_min_atr_mult: 1.0         # filter mark ITL/ITH di chart (× ATR_H1; kosmetik; 0 = off)
+
+# --- Risk / SL / sizing ---
+sl_mode: ltf_structure          # sl_anchor: ltf_structure | body_poi
+sl_buffer_pips: 5               # sl_buffer_pips_gold ($0.50)
+risk_pct: 0.005                 # risk_per_trade_pct (0.5%)
+start_balance: 25000            # saldo awal (basis minggu pertama)
+
+# --- Day type ---
+heavy_accum_max_range_pct: 0.4  # ambang range sesi < 40% ATR = akumulasi
+heavy_accum_confirm_ny: false   # OFF (parity). true = stage-3 D.7: heavy_accum di-confirm hanya bila NY (06:00-12:00) juga kompresi & tak ada FVG 1H baru; NY displace → suspected (tak gate)
+
+# --- Execution layer (J.2) ---
+exec_layer_on: false            # false = alert mode (tag saja, tak pernah block)
+max_trade_per_day: 3            # 0 = tak terbatas
+concurrency: 0                  # posisi simultan maks (0 = tak terbatas)
+
+# --- Regime / gate ---
+impulse_only: true              # DEFAULT ON (uji 2026-06-02): retrace counter-OF mati, periode koreksi tetap trade searah OF — OOS +197R/PF2.01/DD7.9% (vs off +180R/1.96/8.4)
+retrace_fvg_gate: true          # Section E penuh: retrace terikat target weekly FVG
+zone_fib_tf: daily              # sumber Fib gate zona: weekly | daily (daily = non-stale, default)
+
+# --- Quality gate ---
+require_standard_trigger: true  # hanya entry ITL/ITH STANDARD (buang fast_early)
+max_poi_tier: 3                 # hanya POI tier ≤ N di pool H1 (HTF bypass); 2→3 OOS dominan tipis (2026-06-02); 0 = tanpa batas
+
+# --- Kunci #3 fallback (F.5) ---
+kunci3_fallback: false          # fallback opposing-liquidity saat tak ada POI (default OFF)
+kunci3_fallback_band_pips: 30   # setengah-lebar band POI fallback (pip gold)
+
+# --- Gate toggles (keputusan user 2026-06-01/02; true = gate aktif/memblokir) ---
+asia_close_gate: false          # OFF — Asia-close tak gating; klasifikasi pakai Asia parsial (J.1 #8)
+qt_phase_gate: false            # OFF — QT phase (daily) tak gating (J.1 #2/#3/D.5)
+weekly_phase_gate: false        # OFF — weekly phase dimatikan (over-filter); hanya relevan kalau qt_phase_gate on
+day_type_gate: true             # ON — tolak heavy_accum (protektif: off → OOS −4R→−18R) (J.1 #5)
+fib_zone_gate: false            # OFF — Fib bukan gate keras, hanya filter premium/discount POI
+session_pm_gate: false          # OFF — PM dinyalakan (A/B: OOS +76R→+161R) (J.1 #4)
+ams_gate: false                 # OFF — AMS jadi PENANDA di narasi, bukan gate (A/B: OOS +56R→+116R) (C.4)
+mo_gate: false                  # OFF — Midnight Open (pertemuan 8): buy hanya < MO 00:00 NY, sell hanya > MO; PENANDA di narasi/chart, diukur dulu sebelum lock
+releq_tolerance_pct: 0.05       # REH/REL: toleransi "equal" % harga (pertemuan 10; auto-scale antar-era)
+releq_tolerance_pips: 0         # override pips gold (pertemuan 1-2: 5); 0 = pakai pct
+releq_lookback_bars: 120        # window H1 scan REH/REL (= window chart)
+releq_max_gap_bars: 10          # gap maks antar swing equal berurutan (candle per TF) — double top harus sejajar dekat
+releq_sweep_gate: false         # OFF — wait-for-sweep (rule pertemuan 1-2 #6); PENANDA dulu, diukur sebelum lock
+releq_sweep_fresh_bars: 6       # sweep "baru-baru ini" = dalam N candle H1 terakhir
+agenda_gate: false              # OFF — agenda "farthest=sole target" non-viable
+agenda_nearest: false           # arah agenda: true = FVG HTF TERDEKAT, false = TERJAUH (hanya dipakai kalau agenda_gate on)
+fractal_poi: true               # ON — POI fractal multi-TF (H1+H4+D+W)
+poi_break_wick: false           # false = invalidasi PDR pakai BODY close (wick terlalu agresif vs stop-hunt)
+london_q34_only: true           # ON — London hanya Q3/Q4 (lewati akumulasi/manipulasi Q1/Q2)
+london_q4_only: false           # eksperimen: London hanya Q4 (04:30-06:00 NY) — default OFF
+
+# --- Fix bias/OF + skip-hour + OB (2026-06-02) ---
+of_swing_atr_mult: 0            # filter swing WeeklyOF/Regime >= N×ATR weekly; 0 = off (uji: tak menambah edge, knob utk re-test)
+bias_swing_atr_mult: 0          # filter swing DailyBias >= N×ATR daily; 0 = off (uji: malah memburukkan)
+disable_ob: true                # buang Order Block dari pool PD Array semua TF (logika OB direview)
+ob_strict: false                # pertemuan 4: OB versi-benar (reversal+displacement-FVG+liquidity-sweep). false=proxy lama (parity). Aktif hanya bila disable_ob:false
+bpr_directional: true           # pertemuan 4: BPR directional (1 arah = FVG lebih baru, zona IRISAN). LOCK 2026-06-04 (correctness, backtest identik). false=dua-arah lama
+disable_bpr: false              # DIUJI 2026-06-04: buang BPR → OOS 2.08→1.97 (lebih buruk, BPR net-akretif via seleksi) → tetap aktif; knob utk re-test
+ifvg_require_no_same_dir_fvg: true   # IFVG Fallback Rule (pertemuan 4): IFVG cuma sah kalau tak ada FVG searah live (LOCK 2026-06-04, backtest netral + faithful rules)
+skip_entry_hours_ny: 8          # jam NY dilarang entry (CSV, mis. "8,20"); 08:00 = news hour 08:30 ET; kosongkan utk off
+london_min_hour_ny: 4           # entry London hanya jam NY >= 4 (buang candle 03:00; user 2026-06-02); 0 = off
+retrace_tp_to_fvg: false        # DIUJI & GAGAL (entry→target = 10-17× risk → 0% win): default off, knob utk re-test
+
+# --- Bedah OF/bias (2026-06-02): gate umur-flip + konfirmasi bearish (diuji) ---
+of_bear_confirm_weeks: 0        # DIUJI & GAGAL (delay ganti short dgn long saat koreksi → −21R): off, knob utk re-test
+min_bias_age_days: 8            # karantina umur-bias (bearish & default) — OOS dominan; 0 = off
+min_bias_age_days_bull: 3       # karantina KHUSUS bullish (user 2026-06-03: fresh-bull PF1.09 jinak); -1 = ikut min_bias_age_days
+max_of_age_days: 0              # off; set 60 + min_bias_age 6 = "mode konservatif" (OOS PF2.36/DD4.8% tapi −46R)
+skip_retrace: false             # true = regime retrace TIDAK ditradingkan sama sekali (≠ impulse_only yg memaksa searah OF)
+max_confluence: 3               # cap ATAS komponen POI semua TF (conf4+ PF 0.0-0.3); LOCKED 2026-06-02 (OOS PF2.36, 4/4 fold >=2.05); 0 = off
+bb_needs_fvg: true              # Breaker hanya sah berdampingan FVG/FVGBreak/IFVG; LOCKED 2026-06-02 (cluster BB-tanpa-FVG PF1.07 dibuang)
+bb_require_displacement: true   # BB sah hanya kalau FVG penyah = displacement KELUAR range candle BB (bullish f.Top>BB.High / bearish f.Bottom<BB.Low); LOCK 2026-06-09 correctness (P&L-neutral: OOS −3R, PF 2.10, DD ~flat)
+london_sweep_entry: false       # bypass gate jam/quarter London bila likuiditas Asia sudah di-sweep berlawanan bias (rule user) — diuji & netral
+entry_trigger_mode: itl         # trigger 5m: itl (struktur, default) | disp (displacement) | reject (rejection close) | dispreject | sweep — diuji 2026-06-03
+disp_atr_mult: 1.0              # ambang body displacement × ATR m5 (mode disp/dispreject); provisional
