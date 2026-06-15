@@ -1,0 +1,9 @@
+[Unit]
+Description=Forex auto-deploy (pull origin/main, build arm64, restart alertd)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Jalan sebagai root: build, tulis binary, restart forex-alertd, update unit file.
+ExecStart=/opt/forex/deploy.sh

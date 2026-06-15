@@ -1,0 +1,14 @@
+[Unit]
+Description=Cek origin/main tiap 1 menit lalu deploy kalau ada commit baru
+
+[Timer]
+# Tiap menit pada detik :00. Build hanya jalan saat SHA remote != lokal,
+# jadi mayoritas tick cuma `git fetch` (sub-detik). systemd tak akan memulai
+# run baru selagi run sebelumnya (oneshot) masih aktif → tak ada overlap.
+OnCalendar=*:0/1
+AccuracySec=15s
+# Tunda ~1 menit setelah boot agar jaringan & forex-alertd sempat siap dulu.
+OnBootSec=1min
+
+[Install]
+WantedBy=timers.target

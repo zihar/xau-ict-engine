@@ -1,0 +1,19 @@
+[Unit]
+# Oneshot: satu evaluasi newsalert (CPI/PPI/NFP) → kirim alert pra/pasca-rilis
+# bila waktunya. Dedup via news_state.json (aman dijalankan berulang oleh timer).
+# Read-only: hanya tarik kalender Forex Factory + kirim Telegram.
+Description=Forex news alert (CPI/PPI/NFP) one-shot evaluation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/forex
+EnvironmentFile=/opt/forex/.env
+# -event: indikator dipantau. -prewindow: kirim ancang-ancang ≤60m sebelum rilis.
+# Isi -nowcast manual (opsional) saat hari rilis bila punya angka Cleveland Fed/ADP.
+ExecStart=/opt/forex/newsalert -event CPI,PPI,NFP -state /opt/forex/data/news_state.json -prewindow 60m
+
+[Install]
+WantedBy=multi-user.target

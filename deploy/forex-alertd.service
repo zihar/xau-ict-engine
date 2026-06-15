@@ -1,0 +1,15 @@
+[Unit]
+Description=Forex realtime alert daemon (alertd)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/forex
+EnvironmentFile=/opt/forex/.env
+ExecStart=/opt/forex/alertd -dir /opt/forex/data -config /opt/forex/config.yaml -state /opt/forex/data/alert_state.json -news -news-events CPI,PPI,NFP -news-state /opt/forex/data/news_state.json -news-feedcache /opt/forex/data/news_feed_cache.json -news-bls -news-skip
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

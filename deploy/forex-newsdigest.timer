@@ -1,0 +1,14 @@
+[Unit]
+Description=Reminder mingguan news XAUUSD — Senin 07:00 WIB (00:00 UTC)
+
+[Timer]
+# Senin 00:00 UTC = 07:00 WIB (WIB tanpa DST → eksplisit UTC = stabil sepanjang tahun).
+OnCalendar=Mon *-*-* 00:00:00 UTC
+# Kalau server mati tepat di jadwal, jalankan begitu hidup lagi (dedup per-minggu
+# cegah dobel bila sudah terkirim pekan itu).
+Persistent=true
+AccuracySec=1min
+Unit=forex-newsdigest.service
+
+[Install]
+WantedBy=timers.target

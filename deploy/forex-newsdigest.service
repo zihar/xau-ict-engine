@@ -1,0 +1,19 @@
+[Unit]
+# Oneshot: reminder MINGGUAN — daftar rilis high-impact XAUUSD (CPI/PPI/NFP/FOMC)
+# pekan ini → kirim Telegram. Dedup per-minggu via news_state.json (aman bila
+# timer fire ulang / server sempat mati lalu Persistent catch-up). Read-only.
+Description=Forex weekly news digest (CPI/PPI/NFP/FOMC) — Senin pagi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/forex
+EnvironmentFile=/opt/forex/.env
+# -digest: mode reminder mingguan. State dipisah dari alert pra/pasca? TIDAK —
+# pakai file yg sama (key WeekKey beda dari release key, tak bentrok).
+ExecStart=/opt/forex/newsalert -digest -state /opt/forex/data/news_state.json
+
+[Install]
+WantedBy=multi-user.target

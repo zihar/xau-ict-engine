@@ -1,0 +1,14 @@
+[Unit]
+Description=Jalankan forex-newsalert tiap 5 menit (poll kalender → alert pra/pasca-rilis)
+# Trigger service oneshot newsalert. Tiap 5 menit cukup: dedup mencegah kirim
+# ganda, dan feed Forex Factory rate-limit bila di-poll terlalu rapat (jangan <1m).
+
+[Timer]
+OnCalendar=*:0/5
+# Jalankan run yang terlewat kalau server sempat mati (mis. reboot tepat di jam rilis).
+Persistent=true
+AccuracySec=20s
+Unit=forex-newsalert.service
+
+[Install]
+WantedBy=timers.target
