@@ -7,12 +7,11 @@ set -euo pipefail
 
 RUNTIME=/opt/forex
 REPO="$RUNTIME/repo"
-KEY="$RUNTIME/deploy_key"
 BRANCH=main
 GO=/usr/local/go/bin/go
 
 export HOME=/root   # GOCACHE/GOMODCACHE default (build cache persisten antar-run)
-export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+# Repo public → fetch anonim via HTTPS, tak perlu SSH deploy key.
 
 cd "$REPO"
 

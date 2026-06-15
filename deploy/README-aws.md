@@ -180,9 +180,9 @@ dulu; daemon Mac bisa dihidupkan lagi (plist masih ada tapi **di-disable 2026-06
 
 ## 9. Auto-deploy saat `git push` (pull-based)
 
-Tiap `git push` ke `origin/main`, EC2 menarik & deploy sendiri — **tanpa** menaruh
-SSH key/AWS creds di GitHub, **tanpa** membuka port (outbound-only, kebal firewall kantor),
-biaya AWS **$0** (compute t4g.small ditutup free trial, transfer git diabaikan).
+Tiap `git push` ke `origin/main`, EC2 menarik & deploy sendiri. Repo **public** → EC2
+fetch anonim via **HTTPS, tanpa deploy key / kredensial apa pun**, **tanpa** membuka port
+(outbound-only), biaya AWS **$0** (compute t4g.small ditutup free trial, transfer git diabaikan).
 
 **Cara kerja:** `forex-deploy.timer` memicu `/opt/forex/deploy.sh` (sbg root) tiap **1 menit**.
 Tiap tick `git fetch` membandingkan SHA `origin/main` vs lokal — kalau sama, diam (sub-detik).
@@ -197,20 +197,14 @@ self-update (mv atomik) jadi perubahan `deploy.sh` ikut ter-deploy.
 ssh -i ~/Projects/forex-backtest/forex-key.pem ubuntu@<EC2_PUBLIC_IP>   # via VPN/tethering dari kantor
 
 # salin skrip setup ke VM (atau ambil dari repo setelah clone perdana)
-scp -i ~/Projects/forex-backtest/forex-key.pem \
+scp -i ~/path/ke/forex-key.pem \
   deploy/setup-autodeploy.sh ubuntu@<EC2_PUBLIC_IP>:/tmp/
 
-# Run-1: bikin deploy key + cetak PUBLIC KEY
+# install Go, clone repo (HTTPS anonim), pasang & enable timer, build perdana
 sudo bash /tmp/setup-autodeploy.sh
 ```
 
-Run-1 mencetak **public key**. Paste ke GitHub: **repo Settings → Deploy keys → Add deploy
-key**, centang **read-only** (JANGAN allow write). Lalu:
-
-```bash
-# Run-2: install Go, clone repo, pasang & enable timer, build perdana
-sudo bash /tmp/setup-autodeploy.sh
-```
+Repo public → tak perlu deploy key. Skrip langsung clone via HTTPS dalam sekali jalan.
 
 Selesai — mulai sekarang cukup `git push`, ~1 menit kemudian live.
 
