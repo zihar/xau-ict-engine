@@ -1,0 +1,65 @@
+================================================================================
+  LAPORAN ANALISIS SWEEP LIKUIDITAS FRACTAL (QT) — XAUUSD
+  cmd/q1sweep  |  digenerate: 2026-06-06 21:45 WIB
+================================================================================
+
+Pertanyaan: Apakah likuiditas Q1 NY-AM (06:00-07:30) selalu tersapu di sisa sesi
+NY-AM, dan apakah pola berbeda antara hari AMDX vs XAMD? (+ Asia di-sweep saat London).
+
+Definisi sweep = sisi BERLAWANAN daily-bias (Bullish->R-Low ditembus; Bearish->
+R-High ditembus). Bias point-in-time (anti-lookahead). Skenario AMDX/XAMD = sesi
+Asia (mirror engine, 0-drift vs cmd/narrate). Read-only, observasional.
+
+
+--------------------------------------------------------------------------------
+  TARGET 1 — Q1 NY-AM tersapu di sisa NY-AM (Q2/Q3/Q4)
+--------------------------------------------------------------------------------
+Target: nyam-q1  (range=NY-AM Q1 06:00–07:30, scan=NY-AM Q2..Q4)
+Param: scenario-mode=atr  requireFVG=false  bias-atr-mult=0.00  rentang=semua
+Trading day terklasifikasi: 1129  (skip: atr=1, bias=12)
+
+  skenario |  hari | tersapu |   tdk | %sweep |   Q2 |   Q3 |   Q4 | never
+  -----------------------------------------------------------------------------
+  AMDX    |   887 |     707 |   180 |  79.7% |  564 |  117 |   26 |   180
+  XAMD    |   242 |     184 |    58 |  76.0% |  159 |   19 |    6 |    58
+  -----------------------------------------------------------------------------
+  TOTAL   |  1129 |     891 |   238 |  78.9% |  723 |  136 |   32 |   238
+
+Per arah bias (TOTAL):
+  bullish (sweep R-Low) : 671 hari, 524 tersapu (78.1%)
+  bearish (sweep R-High): 458 hari, 367 tersapu (80.1%)
+
+
+--------------------------------------------------------------------------------
+  TARGET 2 — Sesi Asia tersapu saat London (Q1-Q4 / manipulasi)
+--------------------------------------------------------------------------------
+Target: asia  (range=Asia 18:00–00:00, scan=London Q1..Q4)
+Param: scenario-mode=atr  requireFVG=false  bias-atr-mult=0.00  rentang=semua
+Trading day terklasifikasi: 1129  (skip: atr=1, bias=12)
+
+  skenario |  hari | tersapu |   tdk | %sweep |   Q1 |   Q2 |   Q3 |   Q4 | never
+  ------------------------------------------------------------------------------------
+  AMDX    |   887 |     477 |   410 |  53.8% |  205 |  150 |   84 |   38 |   410
+  XAMD    |   242 |     110 |   132 |  45.5% |   63 |   27 |   14 |    6 |   132
+  ------------------------------------------------------------------------------------
+  TOTAL   |  1129 |     587 |   542 |  52.0% |  268 |  177 |   98 |   44 |   542
+
+Per arah bias (TOTAL):
+  bullish (sweep R-Low) : 671 hari, 328 tersapu (48.9%)
+  bearish (sweep R-High): 458 hari, 259 tersapu (56.6%)
+
+
+--------------------------------------------------------------------------------
+  INTERPRETASI
+--------------------------------------------------------------------------------
+* Q1 NY-AM TIDAK selalu tersapu (~79%). AMDX (79.7%) vs XAMD (76.0%) nyaris sama
+  -> ekspektasi naif "XAMD = NY-AM fase Manipulasi lebih sering sweep" TAK terbukti.
+* Temuan kuat: ~81% sweep terjadi di Q2 NY-AM (07:30-09:00) = sub-kuartal manipulasi
+  fractal QT, terlepas dari skenario harian.
+* Asia tersapu saat London hanya ~52% (AMDX 53.8% > XAMD 45.5%), pertama paling
+  sering di London Q1-Q2.
+* Asimetri: hari bearish sedikit lebih sering tersapu daripada bullish.
+
+CAVEAT: semua angka dari 1 rezim bull (2022-2026); sampel XAMD kecil. Re-run setelah
+'cmd/fetch -from 2018' untuk cek stabilitas lintas-rezim.
+================================================================================

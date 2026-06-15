@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Analisis Senin Minggu-FOMC — XAUUSD — 15 Juni 2026</title>
+<style>
+  :root{
+    --gold:#b8860b; --gold-soft:#f9f2dd; --ink:#1f2328; --muted:#5b6470;
+    --line:#e3e6ea; --green:#1a7f4b; --red:#c0392b; --bg-soft:#faf8f3;
+    --navy:#1f2d3d; --amber-bg:#fdf6e3; --amber-line:#e8d49a;
+  }
+  @page{ size:A4; margin:16mm 15mm; }
+  *{ box-sizing:border-box; }
+  body{
+    font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink); line-height:1.55; font-size:11pt; margin:0;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  h1{ font-size:22pt; margin:0 0 4px; letter-spacing:-.3px; }
+  h1 .badge{ font-size:10pt; vertical-align:middle; background:var(--gold-soft);
+    border:1px solid var(--amber-line); color:#7a5c08; border-radius:20px;
+    padding:2px 11px; margin-left:8px; font-weight:600; letter-spacing:0; }
+  .lead{ color:var(--muted); font-size:11pt; margin-top:3px; }
+  .hero{ border-bottom:3px solid var(--gold); padding-bottom:12px; margin-bottom:18px; }
+
+  h2{ font-size:13.5pt; margin:24px 0 9px; color:#1f2d3d; padding-left:11px;
+      border-left:5px solid var(--gold); text-transform:uppercase; letter-spacing:.4px; }
+  h3{ font-size:11.5pt; margin:14px 0 4px; color:var(--ink); }
+  p{ margin:7px 0; }
+
+  .callout{ background:var(--bg-soft); border:1px solid var(--line);
+    border-radius:9px; padding:13px 16px; margin:12px 0; }
+  .warn{ background:var(--amber-bg); border:1px solid var(--amber-line);
+    border-left:5px solid var(--gold); border-radius:9px; padding:13px 16px; margin:14px 0; }
+  .answer{ background:#f3f8f4; border:1px solid #cfe6d8; border-left:5px solid var(--green);
+    border-radius:9px; padding:11px 15px; margin:10px 0; }
+  .answer .tag{ font-weight:700; color:var(--green); }
+
+  table{ border-collapse:collapse; width:100%; margin:11px 0; font-size:9.7pt; }
+  th,td{ border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+  thead th{ background:var(--navy); color:#fff; font-weight:600; border-color:#2c3e50; }
+  td.num,th.num{ text-align:right; font-variant-numeric:tabular-nums; }
+  tr.tonight td{ background:var(--gold-soft); font-weight:600; color:#6b4e06; }
+  .green{ color:var(--green); font-weight:700; }
+  .red{ color:var(--red); font-weight:700; }
+  .up{ color:var(--green); } .down{ color:var(--red); }
+
+  ul{ margin:6px 0 6px 4px; padding-left:18px; }
+  li{ margin:5px 0; }
+  .small{ font-size:9.3pt; color:var(--muted); }
+  footer{ margin-top:24px; padding-top:10px; border-top:1px solid var(--line);
+    color:var(--muted); font-size:8.7pt; display:flex; justify-content:space-between; }
+  .avoid-break{ break-inside:avoid; }
+  b.hot{ color:var(--red); } b.soft{ color:#2e6da4; }
+  code{ background:#f0eee6; padding:1px 5px; border-radius:4px; font-size:9.2pt; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Apakah Senin di Minggu FOMC Sering “X”? <span class="badge">15 Juni 2026</span></h1>
+  <p class="lead">XAUUSD (Gold) &middot; Uji statistik label AMD <b>A (akumulasi)</b> vs <b>X (ekspansi/displacement)</b> pada hari Senin &middot;
+  Sampel: <b>232 Senin</b> (cache 2022→Jun 2026), <b>35</b> di minggu rapat FOMC &middot;
+  <span class="small">Sumber A/X: detektor engine (mirror, display-only — bukan gate P&amp;L).</span></p>
+</div>
+
+<div class="warn avoid-break">
+  <p style="margin:0"><b>⚑ Ringkasan utama.</b> Hipotesis “Senin minggu-FOMC sering X” <b>TIDAK terbukti — malah kebalikannya
+  untuk sesi harian.</b> Sesi <b>Asia hari Senin</b> di minggu-FOMC justru <b>jauh lebih jarang X</b>
+  (<b>11,4%</b> vs 29,9% di minggu biasa, selisih <b class="red">−18,5 pp</b>, p≈0,023) — artinya Senin pra-FOMC cenderung
+  <b>akumulasi/kompresi</b>, bukan ekspansi. Ini konsisten dengan logika pasar <i>wait-and-see</i>: displacement besar
+  ditahan sampai pengumuman FOMC (umumnya Rabu). Skenario <b>QT Mingguan (candle Senin 4H)</b> praktis <b>tak berbeda</b>
+  (34,3% vs 31,1%, p≈0,71).</p>
+</div>
+
+<div class="answer avoid-break">
+  <p style="margin:0"><span class="tag">JAWABAN:</span> <b>Tidak.</b> Di rezim 2022–2026, Senin minggu-FOMC <b>bukan</b> hari ekspansi —
+  pada sesi Asia justru cenderung <b>A (akumulasi)</b>. Jangan memperlakukan Senin minggu-FOMC sebagai sinyal displacement awal;
+  jika ada, “ekspansi” minggu-FOMC datang setelah rilis (Rabu+), bukan di Senin.</p>
+</div>
+
+<h2>Hasil per Metrik</h2>
+<p class="small">“X” = sesi/candle <b>ekspansif</b> (true-move terarah ≥ 1,5×ATR). “A” = <b>akumulasi</b> (kompresi / move tak meaningful).
+Dua metrik dipakai karena “Senin” punya dua makna dalam piramida: sesi harian (Asia) dan quarter mingguan (D.4).</p>
+
+<table class="avoid-break">
+  <thead>
+    <tr>
+      <th>Metrik (apa yang diukur)</th>
+      <th class="num">Minggu-FOMC<br><span class="small">%X (nX/N)</span></th>
+      <th class="num">Non-FOMC<br><span class="small">%X (nX/N)</span></th>
+      <th class="num">Selisih</th>
+      <th>Signifikansi*</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>(a) Sesi HARIAN Senin</b> — Asia H1 (Senin 18:00→00:00 NY)<br>
+        <span class="small">gap-anchor ON, FVG-off · <code>ClassifyDailyG</code></span></td>
+      <td class="num"><b class="soft">11,4%</b><br><span class="small">4/35</span></td>
+      <td class="num">29,9%<br><span class="small">59/197</span></td>
+      <td class="num"><span class="red">−18,5 pp</span></td>
+      <td><b>p≈0,023</b> — nyaris signifikan; FOMC-week jauh lebih sering <b>A</b>.</td>
+    </tr>
+    <tr>
+      <td><b>(b) QT MINGGUAN Senin</b> — candle Senin 4H (D.4)<br>
+        <span class="small">FVG-4H wajib, tanpa gap-anchor · <code>ClassifyWeekly</code></span></td>
+      <td class="num">34,3%<br><span class="small">12/35</span></td>
+      <td class="num">31,1%<br><span class="small">61/196</span></td>
+      <td class="num">+3,2 pp</td>
+      <td>p≈0,71 — <b>tak berbeda</b> (efek FOMC tak terdeteksi).</td>
+    </tr>
+  </tbody>
+</table>
+<p class="small">*Uji selisih dua proporsi (pooled z, dua-sisi). Indikatif saja — N kecil (35 Senin FOMC), asumsi normal longgar.</p>
+
+<h2>Pola yang Teridentifikasi</h2>
+
+<div class="warn avoid-break">
+  <p style="margin:0"><b>⚠ Arahnya berlawanan dari dugaan intuitif.</b> Banyak yang menyangka minggu-FOMC = volatil sejak awal,
+  jadi Senin “pasti X”. Data berkata sebaliknya untuk sesi harian: <b>pra-FOMC = kompresi</b>. Pasar menahan posisi
+  besar sampai ketidakpastian kebijakan terselesaikan, lalu ekspansi pecah <i>setelah</i> statement (Rabu 14:00 ET).</p>
+</div>
+
+<h3>1. Sesi harian Senin: lebih sering akumulasi (A) menjelang FOMC</h3>
+<ul>
+  <li>Hanya <b>4 dari 35</b> Senin minggu-FOMC yang Asia-nya ekspansif (11,4%), vs <b>~30%</b> di minggu biasa.</li>
+  <li>Logika: pengumuman FOMC = event biner risiko-tinggi. Pelaku pasar mengecilkan eksposur &amp; range mengempis
+      (akumulasi) sampai hasil rapat keluar — klasik “the calm before the storm”.</li>
+  <li>Implikasi piramida: di minggu-FOMC, ekspektasi <b>displacement / manipulasi</b> lebih tepat dicari <b>pasca-rilis</b>
+      (Rabu sore–Kamis), bukan dari sesi Senin.</li>
+</ul>
+
+<h3>2. QT Mingguan (candle Senin 4H): tak peka terhadap FOMC</h3>
+<p>Skenario mingguan D.4 (yang melihat seluruh candle Senin di 4H, dengan syarat FVG-4H) menunjukkan <b>34,3% vs 31,1%</b>
+— selisih +3,2 pp, p≈0,71. Praktis nol. Perbedaan dari metrik (a) wajar: cakupan waktu beda (sepanjang trading-day Senin
+vs hanya sesi Asia), syarat FVG aktif, dan tanpa gap-anchor. Kesimpulan: <b>kalau pun ada efek FOMC, ia muncul di
+granularitas sesi-harian, bukan di label mingguan.</b></p>
+
+<div class="warn avoid-break">
+  <p style="margin:0"><b>⮕ 3. “Quiet Monday” = filter, bukan sinyal.</b> Temuan ini lebih berguna sebagai <b>ekspektasi konteks</b>:
+  di minggu-FOMC, jangan kaget Senin terasa sepi/range-bound, dan jangan over-trade “breakout” Senin yang rapuh.
+  Energi terarah lebih mungkin tersimpan untuk pasca-FOMC.</p>
+</div>
+
+<h2>Metodologi</h2>
+<div class="callout avoid-break">
+  <ul style="margin:0">
+    <li><b>Label A/X</b> dari detektor engine yang sama dengan pipeline (mirror, 0-drift): sesi harian via
+        <code>ClassifyDailyG</code> (anchor 18:00 NY, gap-anchor ON, FVG-off — default 2026-06-15); mingguan via
+        <code>ClassifyWeekly</code> (candle Senin 4H, FVG-4H wajib). <b>X = XAMD</b> (Q1 ekspansif).</li>
+    <li><b>“Minggu-FOMC”</b> = minggu kalender (Senin) yang memuat tanggal pengumuman FOMC. Tiap tanggal FOMC
+        dipetakan ke Senin minggunya; tiap Senin trading-day dicek keanggotaan.</li>
+    <li><b>Tanggal FOMC</b> = hari ke-2 rapat (statement 14:00 ET), 2022–2026, dari jadwal resmi Federal Reserve
+        (8 rapat/tahun; mis. 12 Jun 2024 → Senin minggunya 10 Jun).</li>
+    <li><b>Sampel</b> 232 Senin (cache XAU_USD 2022-01 → 2026-06), 35 di minggu-FOMC. Data harga: OANDA v20 (midpoint, anchor 18:00 NY).</li>
+    <li><b>Reproduksi:</b> <code>go run ./cmd/fomcscan [-all] [-from … -to …]</code> (read-only; tak mengubah engine/config/Pine).</li>
+  </ul>
+</div>
+
+<p class="small" style="margin-top:14px"><b>Caveat jujur:</b> semua angka dari <b>1 rezim bull 2022–2026</b> dengan sampel
+minggu-FOMC kecil (N=35). Selisih metrik (a) menarik (−18,5 pp) tapi p≈0,023 pada N kecil = <b>indikatif, bukan definitif</b> —
+re-cek saat sampel diperbesar (<code>cmd/fetch -from 2018</code>, lintas rezim). Label A/X bersifat <b>display-only</b>
+(<code>qt_phase_gate=false</code>) — tidak memengaruhi P&amp;L backtest; temuan ini konteks/edukasi, bukan rule trading.</p>
+
+<footer>
+  <span>Dibuat 15 Juni 2026 &middot; XAUUSD FOMC-Monday A/X Analysis &middot; Edukasi, bukan saran investasi. Trading berisiko tinggi — gunakan manajemen risiko.</span>
+  <span>Sumber: OANDA v20, Federal Reserve (jadwal FOMC), detektor engine forex-backtest</span>
+</footer>
+
+</body>
+</html>

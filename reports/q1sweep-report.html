@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Laporan Sweep Likuiditas Fractal (QT) — XAUUSD</title>
+<style>
+  :root{
+    --ink:#1c2330; --muted:#6b7689; --line:#e6e9f0; --soft:#f4f6fb;
+    --amdx:#2563eb; --amdx-bg:#e8f0ff;
+    --xamd:#b4530a; --xamd-bg:#fdeede;
+    --good:#15803d; --bar:#3b82f6; --bar-track:#e9edf6;
+    --accent:#7c3aed;
+  }
+  *{box-sizing:border-box}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); margin:0; background:#fff; font-size:13.5px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:0 26px 48px}
+
+  /* Header */
+  header{
+    background:linear-gradient(120deg,#111827 0%,#1e3a8a 55%,#4c1d95 100%);
+    color:#fff;padding:30px 26px 26px;margin-bottom:26px;
+  }
+  header .inner{max-width:920px;margin:0 auto}
+  .kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.75;margin:0 0 6px}
+  h1{font-size:25px;margin:0 0 10px;font-weight:700;letter-spacing:-.01em}
+  header p{margin:0;opacity:.9;font-size:13px;max-width:680px}
+  .meta{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);
+    border-radius:999px;padding:4px 12px;font-size:11.5px;backdrop-filter:blur(2px)}
+
+  /* Question box */
+  .q{background:var(--soft);border:1px solid var(--line);border-left:4px solid var(--accent);
+    border-radius:8px;padding:14px 18px;margin:0 0 26px}
+  .q b{color:var(--accent)}
+  .q .def{color:var(--muted);font-size:12.5px;margin-top:6px}
+
+  /* Cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 0 30px}
+  .card{border:1px solid var(--line);border-radius:11px;padding:16px 16px 14px;background:#fff;
+    box-shadow:0 1px 2px rgba(20,30,60,.04)}
+  .card .big{font-size:30px;font-weight:750;letter-spacing:-.02em;line-height:1}
+  .card .lbl{font-size:12px;color:var(--muted);margin-top:7px}
+  .card.b1 .big{color:var(--amdx)} .card.b2 .big{color:var(--xamd)} .card.b3 .big{color:var(--accent)}
+
+  /* Sections */
+  section{margin:0 0 30px}
+  h2{font-size:17px;margin:0 0 4px;display:flex;align-items:center;gap:9px}
+  h2 .tag{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#fff;background:var(--ink);
+    border-radius:5px;padding:2px 7px}
+  .sub{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+    border-bottom:2px solid var(--line);font-weight:600}
+  tbody tr:nth-child(even){background:#fafbfe}
+  tr.total td{border-top:2px solid var(--line);font-weight:700;background:#f1f4fb}
+  .scen{display:inline-block;font-weight:700;font-size:11.5px;border-radius:5px;padding:2px 9px}
+  .scen.amdx{color:var(--amdx);background:var(--amdx-bg)} .scen.xamd{color:var(--xamd);background:var(--xamd-bg)}
+
+  /* % bar inside cell */
+  .pcell{display:flex;align-items:center;gap:9px;justify-content:flex-end}
+  .pcell .num{min-width:46px;font-weight:650}
+  .track{width:84px;height:8px;background:var(--bar-track);border-radius:5px;overflow:hidden}
+  .fill{height:100%;background:var(--bar);border-radius:5px}
+  .q2hi{color:var(--good);font-weight:700}
+
+  .note{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:11px 15px;
+    margin-top:13px;font-size:12.7px;color:#14532d}
+  .note b{color:var(--good)}
+
+  .interp{border:1px solid var(--line);border-radius:11px;padding:6px 22px;background:#fff}
+  .interp li{margin:11px 0}
+  .interp .x{color:var(--xamd);font-weight:600}
+
+  .caveat{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;
+    font-size:12.5px;color:#854d0e;margin-top:22px}
+  .caveat b{color:#b45309}
+
+  footer{color:var(--muted);font-size:11.5px;text-align:center;margin-top:26px;
+    border-top:1px solid var(--line);padding-top:14px}
+  code{background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+
+  @page{size:A4;margin:13mm}
+  @media print{
+    header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .card,.scen,.fill,.track,.note,.caveat,.q,tr.total td,thead th{
+      -webkit-print-color-adjust:exact;print-color-adjust:exact}
+    section{break-inside:avoid}
+    .cards{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <p class="kicker">forex-backtest · cmd/q1sweep · XAU_USD</p>
+    <h1>Analisis Sweep Likuiditas Fractal (QT)</h1>
+    <p>Seberapa sering likuiditas sebuah range sumber tersapu (sisi berlawanan bias) di
+       window berikutnya — dipetakan per sub-kuartal, dibedakan skenario harian AMDX vs XAMD.</p>
+    <div class="meta">
+      <span class="chip">Dataset 2022 → 2026</span>
+      <span class="chip">1.129 trading-day</span>
+      <span class="chip">1 rezim bull</span>
+      <span class="chip">Read-only · 0-drift vs engine</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="q">
+    <b>Pertanyaan:</b> Apakah Q1 NY-AM (06:00–07:30) <b>selalu</b> di-sweep selama sesi NY-AM,
+    dan apakah polanya beda antara hari AMDX vs XAMD? (+ apakah Asia di-sweep saat London?)
+    <div class="def">Sweep = sisi <b>berlawanan daily-bias</b> (Bullish → R-Low ditembus; Bearish → R-High ditembus).
+      Bias dihitung point-in-time (anti-lookahead). Skenario AMDX/XAMD = klasifikasi sesi Asia, mirror engine.</div>
+  </div>
+
+  <!-- Headline cards -->
+  <div class="cards">
+    <div class="card b1"><div class="big">78,9%</div><div class="lbl">Q1 NY-AM tersapu di sisa NY-AM — <b>bukan selalu</b> (~1 dari 5 hari tidak)</div></div>
+    <div class="card b3"><div class="big">~81%</div><div class="lbl">dari sweep itu terjadi di <b>Q2 NY-AM</b> (07:30–09:00) = sub-kuartal manipulasi fractal</div></div>
+    <div class="card b2"><div class="big">52,0%</div><div class="lbl">range Asia tersapu saat London — hanya sekitar separuh hari</div></div>
+  </div>
+
+  <!-- TARGET 1 -->
+  <section>
+    <h2><span class="tag">TARGET 1</span> Q1 NY-AM tersapu di sisa sesi NY-AM</h2>
+    <p class="sub">Range R = Q1 NY-AM (06:00–07:30 NY). Window scan = Q2/Q3/Q4 NY-AM (07:30–12:00).
+       Kolom Q2/Q3/Q4 = kuartal <b>pertama</b> yang menyapu.</p>
+    <table>
+      <thead>
+        <tr><th>Skenario</th><th>Hari</th><th>Tersapu</th><th>Tidak</th><th>% Sweep</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Never</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="scen amdx">AMDX</span></td><td>887</td><td>707</td><td>180</td>
+          <td><div class="pcell"><span class="num">79,7%</span><span class="track"><span class="fill" style="width:79.7%"></span></span></div></td>
+          <td class="q2hi">564</td><td>117</td><td>26</td><td>180</td>
+        </tr>
+        <tr>
+          <td><span class="scen xamd">XAMD</span></td><td>242</td><td>184</td><td>58</td>
+          <td><div class="pcell"><span class="num">76,0%</span><span class="track"><span class="fill" style="width:76.0%"></span></span></div></td>
+          <td class="q2hi">159</td><td>19</td><td>6</td><td>58</td>
+        </tr>
+        <tr class="total">
+          <td>TOTAL</td><td>1.129</td><td>891</td><td>238</td>
+          <td><div class="pcell"><span class="num">78,9%</span><span class="track"><span class="fill" style="width:78.9%"></span></span></div></td>
+          <td class="q2hi">723</td><td>136</td><td>32</td><td>238</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note"><b>Kunci:</b> AMDX (79,7%) ≈ XAMD (76,0%) — ekspektasi naif “XAMD = NY-AM fase Manipulasi
+      → lebih sering sweep” <b>tidak terbukti</b>. Yang dominan justru konsentrasi sweep di <b>Q2</b>
+      (723 dari 891), terlepas dari skenario harian. Per arah bias: bearish 80,1% (367/458) sedikit > bullish 78,1% (524/671).</div>
+  </section>
+
+  <!-- TARGET 2 -->
+  <section>
+    <h2><span class="tag">TARGET 2</span> Sesi Asia tersapu saat London (manipulasi)</h2>
+    <p class="sub">Range R = sesi Asia (18:00–00:00 NY). Window scan = sesi London (00:00–06:00).
+       Kolom Q1–Q4 London = kuartal <b>pertama</b> yang menyapu (Q2 01:30–03:00 = manipulasi khas).</p>
+    <table>
+      <thead>
+        <tr><th>Skenario</th><th>Hari</th><th>Tersapu</th><th>Tidak</th><th>% Sweep</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Never</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="scen amdx">AMDX</span></td><td>887</td><td>477</td><td>410</td>
+          <td><div class="pcell"><span class="num">53,8%</span><span class="track"><span class="fill" style="width:53.8%"></span></span></div></td>
+          <td>205</td><td>150</td><td>84</td><td>38</td><td>410</td>
+        </tr>
+        <tr>
+          <td><span class="scen xamd">XAMD</span></td><td>242</td><td>110</td><td>132</td>
+          <td><div class="pcell"><span class="num">45,5%</span><span class="track"><span class="fill" style="width:45.5%"></span></span></div></td>
+          <td>63</td><td>27</td><td>14</td><td>6</td><td>132</td>
+        </tr>
+        <tr class="total">
+          <td>TOTAL</td><td>1.129</td><td>587</td><td>542</td>
+          <td><div class="pcell"><span class="num">52,0%</span><span class="track"><span class="fill" style="width:52.0%"></span></span></div></td>
+          <td>268</td><td>177</td><td>98</td><td>44</td><td>542</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note"><b>Kunci:</b> Asia <b>tidak</b> selalu tersapu saat London — hanya ~52%. AMDX (53,8%) > XAMD (45,5%).
+      Sweep pertama paling sering di London <b>Q1–Q2</b>. Per arah bias: bearish 56,6% (259/458) > bullish 48,9% (328/671).</div>
+  </section>
+
+  <!-- Interpretation -->
+  <section>
+    <h2>Interpretasi</h2>
+    <ul class="interp">
+      <li><b>Tidak “selalu”.</b> Q1 NY-AM tersapu ~79%, Asia-di-London ~52%. Keduanya jauh dari kepastian — perlakukan sweep sebagai kecenderungan, bukan aturan.</li>
+      <li><b>Fractal QT terkonfirmasi di level intra-sesi.</b> Mayoritas sweep Q1 NY-AM jatuh di <b>Q2</b> (sub-kuartal manipulasi), persis prediksi model — dan ini berlaku merata di AMDX maupun XAMD.</li>
+      <li><span class="x">AMDX vs XAMD nyaris tidak membedakan</span> frekuensi sweep NY-AM Q1; untuk Asia-di-London, AMDX malah sedikit lebih sering tersapu daripada XAMD.</li>
+      <li><b>Asimetri arah bias.</b> Hari <b>bearish</b> konsisten lebih sering tersapu daripada bullish di kedua analisis (selaras karakter rezim bull 2022–2026).</li>
+    </ul>
+  </section>
+
+  <div class="caveat"><b>Caveat jujur:</b> seluruh angka berasal dari <b>1 rezim bull (2022–2026)</b>;
+    sampel XAMD relatif kecil (242 hari). Re-run setelah <code>go run ./cmd/fetch -from 2018</code>
+    untuk menguji stabilitas pola lintas-rezim.</div>
+
+  <footer>
+    Digenerate oleh <code>cmd/q1sweep</code> · forex-backtest · read-only &amp; observasional (tidak mengubah engine/rules/config).<br>
+    Reproduksi: <code>go run ./cmd/q1sweep</code> &nbsp;·&nbsp; <code>go run ./cmd/q1sweep -target asia</code> &nbsp;·&nbsp; <code>-all</code> untuk dump per-hari.
+  </footer>
+
+</div>
+</body>
+</html>
