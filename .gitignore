@@ -21,6 +21,7 @@
 /moanalysis
 /narrate
 /q1sweep
+/maniplist
 
 # Artifact hasil generate (bisa dibuat ulang dari engine)
 backtest_result.xlsx
