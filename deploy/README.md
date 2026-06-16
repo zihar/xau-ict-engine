@@ -38,7 +38,7 @@ di VM (semua akses SSH/manajemen lewat alamat tailnet privat).
 Daemon di-build untuk arsitektur ARM64 Linux dari mesin lokal (Mac):
 
 ```bash
-cd ~/Documents/forex-backtest
+cd ~/Documents/xau-ict-engine
 GOOS=linux GOARCH=arm64 go build -o alertd ./cmd/alertd
 ```
 

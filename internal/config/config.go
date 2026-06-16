@@ -29,8 +29,8 @@ import (
 	"strconv"
 	"strings"
 
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/engine"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/engine"
 )
 
 // Load membaca file flat-YAML di path, mulai dari engine.DefaultConfig() lalu

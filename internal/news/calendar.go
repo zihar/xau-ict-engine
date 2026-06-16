@@ -62,7 +62,7 @@ func FetchCalendarRaw(client *http.Client) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "forex-backtest-newsalert/1.0 (+https://github.com/)")
+	req.Header.Set("User-Agent", "xau-ict-engine-newsalert/1.0 (+https://github.com/)")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)

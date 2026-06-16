@@ -23,13 +23,13 @@ import (
 	"strings"
 	"time"
 
-	"forex-backtest/internal/config"
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/news"
-	"forex-backtest/internal/notify"
-	"forex-backtest/internal/oanda"
+	"xau-ict-engine/internal/config"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/news"
+	"xau-ict-engine/internal/notify"
+	"xau-ict-engine/internal/oanda"
 )
 
 // granularity yang di-poll + di-cache (mirror cmd/backtest). dailyAlign=18 (18:00 NY).

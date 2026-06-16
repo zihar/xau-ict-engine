@@ -15,10 +15,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"forex-backtest/internal/config"
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/report"
+	"xau-ict-engine/internal/config"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/report"
 )
 
 func main() {

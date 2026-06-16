@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/notify"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/notify"
 )
 
 // fakeNotifier menangkap pesan tanpa kirim ke Telegram.

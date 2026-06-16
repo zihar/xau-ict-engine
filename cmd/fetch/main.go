@@ -20,8 +20,8 @@ import (
 	"os"
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/oanda"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/oanda"
 )
 
 // dailyAnchorHourNY = jam anchor candle harian (18:00 NY), sesuai

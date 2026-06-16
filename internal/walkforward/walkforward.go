@@ -17,8 +17,8 @@ import (
 	"fmt"
 	"time"
 
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/report"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/report"
 )
 
 // Combo adalah satu kombinasi parameter pada grid sweep.

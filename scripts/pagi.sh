@@ -11,7 +11,7 @@
 # login — skrip ini untuk: hasil fetch + pesan pagi yang instan, dan memastikan
 # agent ter-load lagi kalau sebelumnya sempat di-bootout manual.
 #
-# Pakai: ~/Documents/forex-backtest/scripts/pagi.sh
+# Pakai: ~/Documents/xau-ict-engine/scripts/pagi.sh
 set -euo pipefail
 
 LABEL=id.zihar.forex-alertd

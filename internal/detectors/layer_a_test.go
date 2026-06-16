@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 // hl membuat candle dari (high, low); open/close di tengah (tak dipakai deteksi swing).

@@ -16,9 +16,9 @@ import (
 	"log"
 	"strings"
 
-	"forex-backtest/internal/config"
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/engine"
+	"xau-ict-engine/internal/config"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/engine"
 )
 
 func main() {

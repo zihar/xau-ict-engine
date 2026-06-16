@@ -1,6 +1,6 @@
 package detectors
 
-import "forex-backtest/internal/data"
+import "xau-ict-engine/internal/data"
 
 // PipSizeGold = nilai 1 pip XAUUSD dalam harga ($0.10). Konsisten:
 // fvg_min_gap_pips_gold 5 = $0.50, SL 130 pip = $13 (Section H/I/M).

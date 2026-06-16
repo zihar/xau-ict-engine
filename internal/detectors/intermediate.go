@@ -1,6 +1,6 @@
 package detectors
 
-import "forex-backtest/internal/data"
+import "xau-ict-engine/internal/data"
 
 // ITKind membedakan Intermediary High vs Low (Section C.2/C.3).
 type ITKind int

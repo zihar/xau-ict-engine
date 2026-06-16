@@ -3,8 +3,8 @@ package state
 import (
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
 )
 
 // Anchors = LTL/LTH aktif (unified formulation B.1):

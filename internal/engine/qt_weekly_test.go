@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 // TestClassifyWeeklyQT_MondayClosesMonday mengunci definisi candle Senin (D.4,

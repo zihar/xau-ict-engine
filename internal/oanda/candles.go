@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 // maxCount adalah batas candle per request OANDA.

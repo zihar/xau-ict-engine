@@ -3,7 +3,7 @@ package detectors
 import (
 	"time"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 // SwingKind membedakan swing high dan swing low.

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/xlsx"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/xlsx"
 )
 
 // Metrics = ringkasan per-run (Section L "Per backtest run").

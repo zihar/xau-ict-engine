@@ -107,7 +107,7 @@ Kalau mau tes di Mac tanpa systemd (alertd Mac sudah di-disable, prod di AWS):
 
 ```bash
 # crontab -e — tiap 5 menit, load env lalu evaluasi
-*/5 * * * * cd ~/Documents/forex-backtest && set -a && . ./.env && set +a && ./bin/newsalert -event CPI,PPI -state data/news_state.json >> /tmp/newsalert.log 2>&1
+*/5 * * * * cd ~/Documents/xau-ict-engine && set -a && . ./.env && set +a && ./bin/newsalert -event CPI,PPI -state data/news_state.json >> /tmp/newsalert.log 2>&1
 ```
 
 ## Flag penting

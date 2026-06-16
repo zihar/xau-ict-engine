@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 // dummyCandles membuat beberapa candle naik-turun untuk uji render.
