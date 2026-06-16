@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/news"
-	"forex-backtest/internal/state"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/news"
+	"xau-ict-engine/internal/state"
 )
 
 // ZoneFibTF = sumber timeframe Fib untuk gate zona premium/discount POI.

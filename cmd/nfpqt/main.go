@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/engine"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/engine"
 )
 
 func main() {

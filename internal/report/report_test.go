@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"forex-backtest/internal/engine"
+	"xau-ict-engine/internal/engine"
 )
 
 func tr(r, pnl float64) engine.Trade {

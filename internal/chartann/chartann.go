@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/viz"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/viz"
 )
 
 // Warna konsisten dgn konvensi chart trader.

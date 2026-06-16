@@ -1,4 +1,4 @@
-# DECISIONS — forex-backtest (riwayat eksperimen & keputusan)
+# DECISIONS — xau-ict-engine (riwayat eksperimen & keputusan)
 
 Log kronologis riwayat kalibrasi/eksperimen strategi. Dipisah dari `CLAUDE.md`
 (2026-06-03) supaya instruksi operasional tetap ramping. State/default TERKINI ada

@@ -1,6 +1,6 @@
 package detectors
 
-import "forex-backtest/internal/data"
+import "xau-ict-engine/internal/data"
 
 // Default Section M (Layer A).
 const (

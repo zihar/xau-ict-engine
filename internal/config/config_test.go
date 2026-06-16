@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/engine"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/engine"
 )
 
 // writeTemp menulis isi ke file sementara dan mengembalikan path-nya.

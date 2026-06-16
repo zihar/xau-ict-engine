@@ -3,7 +3,7 @@ package detectors
 import (
 	"time"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 // NYLocation = America/New_York (DST-aware). Section D pakai jam NY (UTC-4/-5).

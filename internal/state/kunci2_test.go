@@ -3,8 +3,8 @@ package state
 import (
 	"testing"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
 )
 
 func c(h, l float64) data.Candle {

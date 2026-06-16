@@ -9,7 +9,7 @@ package detectors
 import (
 	"time"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 // RelEqualLevel = grup 2+ swing sejenis yang levelnya dalam toleransi & belum

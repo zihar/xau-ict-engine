@@ -1,8 +1,8 @@
 package state
 
 import (
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
 )
 
 // Regime = saklar 2 mode dalam satu weekly OF (Section E).
