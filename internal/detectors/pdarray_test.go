@@ -3,7 +3,7 @@ package detectors
 import (
 	"testing"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 func TestConfluenceAndSelection(t *testing.T) {

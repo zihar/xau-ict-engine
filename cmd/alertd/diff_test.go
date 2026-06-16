@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/engine"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/engine"
 )
 
 // poi = helper bikin entri NextPOITF ringkas untuk test diff.

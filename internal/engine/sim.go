@@ -4,8 +4,8 @@ import (
 	"sort"
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
 )
 
 // simulateAll mensimulasikan tiap sinyal jadi trade (Section K). R realized

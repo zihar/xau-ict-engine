@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	"forex-backtest/internal/news"
-	"forex-backtest/internal/notify"
+	"xau-ict-engine/internal/news"
+	"xau-ict-engine/internal/notify"
 )
 
 func main() {

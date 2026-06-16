@@ -20,9 +20,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/report"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/report"
 )
 
 type row struct {

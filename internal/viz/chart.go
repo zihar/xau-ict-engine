@@ -3,7 +3,7 @@
 //
 // Tujuannya menggantikan "screenshot chart" pada workflow trader: output SVG
 // bisa langsung dibuka sebagai gambar di browser. Package ini sengaja berdiri
-// sendiri (hanya import std-lib + forex-backtest/internal/data) supaya tidak
+// sendiri (hanya import std-lib + xau-ict-engine/internal/data) supaya tidak
 // ada coupling/import cycle dengan engine maupun detector.
 package viz
 
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"forex-backtest/internal/data"
+	"xau-ict-engine/internal/data"
 )
 
 // Zone = pita harga horizontal melintang penuh lebar chart (mis. POI / zona

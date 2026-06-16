@@ -16,7 +16,7 @@ sering labil; daemon di region SG bikin reachability OANDA stabil **tanpa VPN**.
 > **Setup arsip Oracle ada di [`README.md`](README.md)** (dipertahankan sebagai referensi).
 
 **Status aktual:** dideploy 2026-06-06. Public IP `<EC2_PUBLIC_IP>`, user `ubuntu`,
-key `~/Projects/forex-backtest/forex-key.pem`. Daemon Mac (launchd) dimatikan saat pindah ke sini.
+key `~/Projects/xau-ict-engine/forex-key.pem`. Daemon Mac (launchd) dimatikan saat pindah ke sini.
 
 > **⚠️ Akses SSH dari jaringan yang memblok port 22:** sebagian jaringan memblok outbound
 > **port 22** (gejala: `nc <EC2_PUBLIC_IP> 22` timeout, tapi `:443` succeed lewat proxy). Dari
@@ -57,7 +57,7 @@ Console AWS → pastikan region kanan-atas = **Asia Pacific (Singapore) ap-south
 ## 2. Cross-compile binary dari Mac (arm64)
 
 ```bash
-cd ~/Projects/forex-backtest
+cd ~/Projects/xau-ict-engine
 GOOS=linux GOARCH=arm64 go build -o /tmp/alertd ./cmd/alertd   # t4g = ARM/aarch64
 ```
 
@@ -68,12 +68,12 @@ Binary statik (std-lib only) → tak perlu install Go di VM.
 ## 3. Kirim file ke VM (scp)
 
 ```bash
-KEY=~/Projects/forex-backtest/forex-key.pem
+KEY=~/Projects/xau-ict-engine/forex-key.pem
 HOST=ubuntu@<EC2_PUBLIC_IP>                       # ganti dgn Public IPv4-mu
 chmod 400 $KEY                                 # permission key (sekali)
 
 # snapshot cache (data/ adalah symlink → resolve dgn -L)
-cp -RL ~/Projects/forex-backtest/data/XAU_USD /tmp/forex-data
+cp -RL ~/Projects/xau-ict-engine/data/XAU_USD /tmp/forex-data
 
 # layout di VM (sekali)
 ssh -i $KEY $HOST 'sudo mkdir -p /opt/forex/data/XAU_USD && sudo chown -R ubuntu:ubuntu /opt/forex'
@@ -194,7 +194,7 @@ self-update (mv atomik) jadi perubahan `deploy.sh` ikut ter-deploy.
 ### Setup sekali (di EC2)
 
 ```bash
-ssh -i ~/Projects/forex-backtest/forex-key.pem ubuntu@<EC2_PUBLIC_IP>   # via VPN/tethering dari kantor
+ssh -i ~/Projects/xau-ict-engine/forex-key.pem ubuntu@<EC2_PUBLIC_IP>   # via VPN/tethering dari kantor
 
 # salin skrip setup ke VM (atau ambil dari repo setelah clone perdana)
 scp -i ~/path/ke/forex-key.pem \
@@ -223,7 +223,7 @@ sudo systemctl disable --now forex-deploy.timer   # matikan auto-deploy (balik k
 
 ## Ringkasan operasional
 
-- **Akses VM:** `ssh -i ~/Projects/forex-backtest/forex-key.pem ubuntu@<EC2_PUBLIC_IP>`
+- **Akses VM:** `ssh -i ~/Projects/xau-ict-engine/forex-key.pem ubuntu@<EC2_PUBLIC_IP>`
   (SSH 22 dibatasi ke IP ter-whitelist; **dari kantor butuh VPN/tethering** — port 22 diblok).
   **Tambah IP saat ini ke whitelist** (AWS CLI, region ap-southeast-1):
   ```bash

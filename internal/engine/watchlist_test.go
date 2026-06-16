@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"forex-backtest/internal/detectors"
+	"xau-ict-engine/internal/detectors"
 )
 
 // sampleWatchNarrative = ScanNarrative sintetis berisi semua field yang dipakai

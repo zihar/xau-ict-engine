@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/news"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/news"
 )
 
 // TestBuildNewsSkipSet: hanya rilis USD high-impact yang jam-NY-nya = kandidat

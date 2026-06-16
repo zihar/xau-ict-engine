@@ -42,10 +42,10 @@ import (
 	"sort"
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/state"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/state"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"forex-backtest/internal/detectors"
+	"xau-ict-engine/internal/detectors"
 )
 
 func TestLatestQ1Close(t *testing.T) {

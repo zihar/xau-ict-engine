@@ -1,4 +1,4 @@
-# forex-backtest
+# xau-ict-engine
 
 POC personal untuk **backtest strategi trading XAUUSD** berbasis piramida
 TDA → DB → AMS → QT → PD Array → Entry. Data harga ditarik dari **OANDA v20 REST API**.

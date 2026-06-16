@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/state"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/state"
 )
 
 // StepStatus = hasil satu langkah scan (untuk pewarnaan UI).

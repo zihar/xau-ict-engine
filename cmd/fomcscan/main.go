@@ -32,9 +32,9 @@ import (
 	"sort"
 	"time"
 
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/engine"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/engine"
 )
 
 // tally = jumlah Senin & jumlah-X, dipisah grup FOMC vs non-FOMC.

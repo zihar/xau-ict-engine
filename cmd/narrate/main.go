@@ -17,12 +17,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"forex-backtest/internal/chartann"
-	"forex-backtest/internal/data"
-	"forex-backtest/internal/detectors"
-	"forex-backtest/internal/engine"
-	"forex-backtest/internal/news"
-	"forex-backtest/internal/viz"
+	"xau-ict-engine/internal/chartann"
+	"xau-ict-engine/internal/data"
+	"xau-ict-engine/internal/detectors"
+	"xau-ict-engine/internal/engine"
+	"xau-ict-engine/internal/news"
+	"xau-ict-engine/internal/viz"
 )
 
 // nyLoc = America/New_York; semua waktu ditampilkan dalam waktu NY (strategi
