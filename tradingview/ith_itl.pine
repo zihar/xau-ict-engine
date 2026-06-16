@@ -532,7 +532,7 @@ alertcondition(ithConfirmed, "ITH / LTH terkonfirmasi", "ITH / LTH terkonfirmasi
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Input PD Array ─────────────────────────────────────────────────────────────
-nPerDir   = input.int(3, "Jumlah komponen terdekat per arah", minval=1, maxval=10, group="PD Array — Seleksi")
+nPerDir   = input.int(5, "Jumlah komponen terdekat per arah", minval=1, maxval=10, group="PD Array — Seleksi")
 showOB    = input.bool(false, "Tampilkan OB (reversal)", group="PD Array — Seleksi", tooltip="OFF (default): sembunyikan komponen OB (order block reversal). Deteksi BB/OB tetap jalan; hanya render OB yang disembunyikan.")
 keepFVGoverlap = input.bool(true, "FVG tetap tampil walau bertumpuk BB/zona lain", group="PD Array — Seleksi", tooltip="ON (default, keputusan user): zona FVG TIDAK disembunyikan walau beririsan dgn zona searah ber-tier lebih tinggi (BB/BPR/FVGBreak/VI) → BB & FVG tampil dua-duanya. OFF: mirror engine clusterTier — area bertumpuk diwakili 1 label tier tertinggi (FVG ketiban BB → hanya BB tampil). ⚠️ DRIFT SENGAJA dari engine saat ON (visual saja; gate trading engine tak terpengaruh). Catatan: tiap FVG yg tampil tetap memakan 1 slot 'nPerDir' per arah.")
 showAllTF = input.bool(false, "Tampilkan SEMUA TF PD Array (default: hanya TF chart yang dibuka)", group="PD Array — Timeframe", tooltip="OFF (default): hanya gambar PD Array TF yang cocok dengan timeframe chart sekarang (H1→H1, H4→H4, Daily→Daily). ON: gambar semua TF yang dicentang di bawah (H1/H4/Daily).")
