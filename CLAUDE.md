@@ -238,6 +238,19 @@ kickstart -k gui/$(id -u)/id.zihar.forex-alertd` (jendela aman ubah cache: `boot
 `bootstrap gui/$(id -u) ~/Library/LaunchAgents/id.zihar.forex-alertd.plist`). `scripts/pagi.sh` =
 start pagi (bootout → `alertd -once` fetch+watchlist instan → bootstrap). Deploy Linux: `deploy/forex-alertd.service`.
 
+**Auto-deploy AWS saat `git push` (pull-based, sejak 2026-06-15):** prod `alertd` jalan di **EC2
+Singapore** (systemd `forex-alertd`, `/opt/forex`; daemon Mac di-disable). Cukup `git push origin
+main` → ~1 menit kemudian live, **tanpa scp/ssh manual**. Mekanisme: `forex-deploy.timer` (tiap 1
+menit, root) → `/opt/forex/deploy.sh` cek SHA `origin/main`; kalau beda → `git reset --hard` → build
+arm64 native di EC2 (std-lib only, no module fetch) → install binary atomik → sync `config.yaml` +
+unit `forex-alertd.service` (kalau berubah, +`daemon-reload`) → `restart forex-alertd`; skrip
+self-update. Repo `zihar/xau-ict-engine` **public** → fetch anonim HTTPS (tak perlu deploy key).
+Clone di `/opt/forex/repo`; `.env`+`data/` di `/opt/forex` (tak di repo → tak ditimpa). File:
+`deploy/{deploy.sh,forex-deploy.{service,timer},setup-autodeploy.sh}`, doc `deploy/README-aws.md §9`.
+Pantau: `journalctl -u forex-deploy -f`. Paksa: `sudo systemctl start forex-deploy.service`. Matikan:
+`sudo systemctl disable --now forex-deploy.timer`. Setup ulang (host/repo baru): `setup-autodeploy.sh`
+(re-runnable). Manual scp = fallback kalau auto-deploy mati (lihat README-aws §Ringkasan operasional).
+
 ## Keputusan & konvensi penting
 
 - **Std-lib only.** Client OANDA pakai `net/http`+`encoding/json`, bukan SDK. Pertahankan
