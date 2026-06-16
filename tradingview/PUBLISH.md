@@ -80,7 +80,8 @@ Display-only — bukan sinyal entry. Bisa dipaksa ke level tertentu lewat input 
 TAMPILAN
 
 • ITH/ITL: menyisakan 1 level aktif (warna penuh) + 1 level "Old" terakhir
-  (dipudarkan), sisanya disembunyikan otomatis.
+  (dipudarkan), sisanya disembunyikan otomatis. Level aktif jadi "Old"/pudar saat
+  pivot-nya DITEMBUS harga (ITH ke atas / ITL ke bawah) atau saat digantikan level baru.
 • Garis level memanjang ke kanan sebagai ray horizontal.
 • QT Fractal: kotak tipis tiap quarter (ngepas range harga) + label, hanya N siklus terakhir.
 • Alert tersedia untuk konfirmasi ITL/LTL & ITH/LTH.
