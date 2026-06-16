@@ -38,6 +38,7 @@ qtFill     = input.bool(false, "Isi kotak quarter (fill warna)", group="QT", too
 qtShowLbl  = input.bool(true, "Label penentuan (bawah-kanan kotak)", group="QT", tooltip="Bubble berlatar warna fase (gaya ITH/ITL) nempel di tepi bawah-kanan kotak, panah menunjuk ke atas: nama periode + quarter + fase AMD (A/M/D/X).")
 qtLblGap   = input.float(0.0, "Jarak label dari kotak (× ATR)", minval=0.0, step=0.1, group="QT", tooltip="0 = label nempel di tepi bawah-kanan kotak (panah menunjuk ke atas). Naikkan (× ATR TF chart) untuk geser ke bawah bila tiban dengan label AMS.")
 qtAmdMult  = input.float(1.5, "AMD: kelipatan ATR untuk X", minval=0.1, step=0.1, group="QT", tooltip="Penentuan AMDX/XAMD tiap siklus dari Q1 (akumulasi vs ekspansi): Q1 = X bila |close−open| Q1 ≥ mult×ATR, selain itu A. Mirror engine MinAtrMult=1.5, TANPA syarat FVG (engine default AsiaRequireFVG=false). ⚠️ ATR dihitung di TF CHART (atrPeriod) — pendekatan, bisa drift dari sub-TF engine; tune di sini bila perlu.")
+qtGapAnchor = input.bool(true, "Q1 anchor ke close sebelumnya (gap-anchor)", group="QT", tooltip="ON (default, mirror engine Q1GapAnchor): true-move Q1 = |close − close candle SEBELUM siklus| → gap pembukaan (Volume Imbalance, mis. gap weekend Senin) ikut terhitung sbg displacement. OFF: |close − open Q1| (perilaku lama, abaikan gap). Engine default ON.")
 qtTransp   = input.int(90, "Transparansi isi kotak", minval=50, maxval=99, group="QT")
 qtColA     = input.color(color.blue,   "Fase A (Akumulasi)",  group="QT")
 qtColM     = input.color(color.orange, "Fase M (Manipulasi)", group="QT")
@@ -448,8 +449,10 @@ qtIsStart = qtInWin and (qtQ != qtQ[1] or qtCs != qtCs[1])
 // ditaruh di TENGAH-ATAS tiap kotak. Teks = periode + quarter + FASE AMD (A/M/D/X).
 // Streaming: quarter baru → box+label baru; berjalan → perpanjang box & re-center label.
 //
-// AMDX/XAMD: tiap siklus dari Q1 — true-move |close−open| Q1 ≥ qtAmdMult×ATR_chart → X
-// (XAMD), selain itu A (AMDX). TANPA syarat FVG (mirror engine AsiaRequireFVG=false).
+// AMDX/XAMD: tiap siklus dari Q1 — true-move Q1 ≥ qtAmdMult×ATR_chart → X (XAMD),
+// selain itu A (AMDX). TANPA syarat FVG (mirror engine AsiaRequireFVG=false). Anchor
+// true-move: qtGapAnchor ON (default, mirror engine Q1GapAnchor) = |close − close
+// SEBELUM siklus| (gap pembukaan ikut terhitung); OFF = |close − open Q1| (abaikan gap).
 // ⚠️ ATR di TF chart → pendekatan, bisa drift dari sub-TF engine (M15/H1/H4).
 var box[]   qtBoxes     = array.new_box()
 var label[] qtLabels    = array.new_label()
@@ -462,6 +465,7 @@ var float   qtCurHi     = na
 var float   qtCurLo     = na
 var int     qtCurStartT = na
 var float   qtQ1Open    = na
+var float   qtQ1Prev    = na     // close bar TEPAT SEBELUM bar pertama siklus (anchor gap-anchor)
 var int     qtScen      = -1     // -1=belum tahu, 0=AMDX, 1=XAMD
 qtCap = qtN * 6 + 6
 if qtInWin
@@ -469,9 +473,11 @@ if qtInWin
     if qtCs != qtCs[1]
         qtScen := -1
         qtQ1Open := open
+        qtQ1Prev := close[1]   // close bar sebelum bar pertama siklus (mis. Jumat utk siklus Senin) → tangkap gap
     // Q1 selesai (quarter pindah dari 0, masih siklus sama) → klasifikasi AMDX/XAMD.
     if qtQ != 0 and qtQ[1] == 0 and qtCs == qtCs[1] and qtScen == -1
-        tm = math.abs(close[1] - qtQ1Open)
+        qtAnchor = (qtGapAnchor and not na(qtQ1Prev)) ? qtQ1Prev : qtQ1Open
+        tm = math.abs(close[1] - qtAnchor)
         atrRef = nz(atrVal[1])
         qtScen := (atrRef > 0 and tm >= qtAmdMult * atrRef) ? 1 : 0
         q1Letter = qtPhaseLetter(qtScen, 0)
