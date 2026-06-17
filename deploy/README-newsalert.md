@@ -1,124 +1,124 @@
-# Deploy `newsalert` — alert rilis berita ekonomi (CPI/PPI/NFP) untuk XAUUSD
+# Deploy `newsalert` — economic news release alert (CPI/PPI/NFP) for XAUUSD
 
-`cmd/newsalert` menarik kalender ekonomi (Forex Factory weekly JSON, gratis tanpa
-key), lalu kirim alert Telegram:
+`cmd/newsalert` pulls the economic calendar (Forex Factory weekly JSON, free, no
+key), then sends a Telegram alert:
 
-- **ANCANG-ANCANG (pra-rilis)** — saat rilis tinggal ≤ `-prewindow` (default 60m):
-  forecast vs previous + nowcast leading (opsional) + level kunci.
-- **PASCA-RILIS** — saat feed mengisi `actual`: actual vs forecast → surprise →
-  bias XAUUSD via playbook (rezim 2026: data panas/kuat = bearish gold).
+- **HEADS-UP (pre-release)** — when the release is ≤ `-prewindow` away (default 60m):
+  forecast vs previous + leading nowcast (optional) + key levels.
+- **POST-RELEASE** — when the feed populates `actual`: actual vs forecast → surprise →
+  XAUUSD bias via the playbook (2026 regime: hot/strong data = bearish gold).
 
-Dedup persisten (`news_state.json`) → aman dijalankan tiap 5 menit oleh timer.
-Read-only: tidak ada eksekusi order.
+Persistent dedup (`news_state.json`) → safe to run every 5 minutes by a timer.
+Read-only: no order execution.
 
-## Cek lokal dulu (tanpa kirim)
+## Check locally first (without sending)
 
 ```bash
 set -a; . ./.env; set +a
-go run ./cmd/newsalert -event CPI,PPI -dry -prewindow 96h      # render pesan ancang-ancang
-# Preview pesan PASCA-RILIS dengan angka hipotetis (tak kirim, tak sentuh state):
+go run ./cmd/newsalert -event CPI,PPI -dry -prewindow 96h      # render the heads-up message
+# Preview the POST-RELEASE message with hypothetical numbers (no send, no state touched):
 go run ./cmd/newsalert -event CPI -simulate "CPI m/m=0.5%,CPI y/y=4.5%,Core CPI m/m=0.6%,Core CPI y/y=3.0%"
 ```
 
-⚠️ Feed Forex Factory **rate-limit** (HTTP 429) bila di-poll terlalu rapat —
-jangan jalankan lebih sering dari ~1×/menit. Tiap 5 menit aman.
+⚠️ The Forex Factory feed is **rate-limited** (HTTP 429) if polled too frequently —
+do not run it more often than ~1×/minute. Every 5 minutes is safe.
 
-## Fallback BLS (`-bls`) — angka resmi saat mirror FF telat
+## BLS fallback (`-bls`) — official numbers when the FF mirror is late
 
-Mirror faireconomy kadang **telat mengisi `actual`** (terbukti CPI 10 Jun: 50+
-menit pasca-rilis `actual` masih kosong). `-bls` menambal ini dengan menarik angka
-dari **API resmi U.S. Bureau of Labor Statistics** (penerbit asli CPI/PPI/NFP) —
-tersedia seketika di jam rilis (08:30 ET), gratis, JSON, std-lib.
+The faireconomy mirror sometimes **populates `actual` late** (confirmed CPI 10 Jun: 50+
+minutes post-release, `actual` still empty). `-bls` patches this by pulling the numbers
+from the **official U.S. Bureau of Labor Statistics API** (the original publisher of CPI/PPI/NFP) —
+available immediately at release time (08:30 ET), free, JSON, std-lib.
 
 ```bash
-go run ./cmd/newsalert -event CPI -bls -dry -stale 24h   # cek (tarik actual dari BLS)
+go run ./cmd/newsalert -event CPI -bls -dry -stale 24h   # check (pull actual from BLS)
 ```
 
-- Hanya mengisi event yang `actual`-nya masih kosong, dan **hanya untuk bulan
-  referensi rilis** (guard cegah isian prematur/salah-bulan).
-- m/m & y/y **dihitung dari indeks BLS** (presisi 3 desimal) → bisa ±0.1 dari angka
-  resmi yang dibulatkan. Pesan menandai sumber via footer.
-- BLS tanpa key = **25 query/hari**; daftar gratis → 500/hari (`BLS_API_KEY` env
-  atau `-bls-key`). Karena fallback hanya dipanggil di jendela pasca-rilis sampai
-  `actual` masuk lalu dedup berhenti, pemakaian normal jauh di bawah limit.
-- Di `alertd`: flag `-news-bls` (+ `-news-bls-key`). Sudah aktif di
+- Only fills events whose `actual` is still empty, and **only for the release's reference
+  month** (a guard prevents premature/wrong-month fills).
+- m/m & y/y are **computed from the BLS index** (3-decimal precision) → may be ±0.1 from the
+  rounded official figures. The message marks the source via a footer.
+- BLS without a key = **25 queries/day**; a free registration → 500/day (`BLS_API_KEY` env
+  or `-bls-key`). Because the fallback is only called in the post-release window until
+  `actual` arrives and then dedup stops, normal usage is well under the limit.
+- In `alertd`: flag `-news-bls` (+ `-news-bls-key`). Already active in
   `deploy/forex-alertd.service`.
 
-## Deploy ke AWS (systemd timer, sejalan dgn alertd)
+## Deploy to AWS (systemd timer, alongside alertd)
 
-Box prod = EC2 ARM (t4g) Singapore, `/opt/forex`, user `ubuntu`, `.env` di
-`/opt/forex/.env` (sudah ada `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`).
+The prod box = EC2 ARM (t4g) Singapore, `/opt/forex`, user `ubuntu`, `.env` at
+`/opt/forex/.env` (already has `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`).
 
 ```bash
-# 1) cross-compile arm64 (dari Mac) lalu copy
+# 1) cross-compile arm64 (from the Mac) then copy
 GOOS=linux GOARCH=arm64 go build -o bin/newsalert ./cmd/newsalert
 scp -i forex-key.pem bin/newsalert ubuntu@<IP>:/opt/forex/newsalert
 scp -i forex-key.pem deploy/forex-newsalert.{service,timer} ubuntu@<IP>:/tmp/
 
-# 2) pasang unit + aktifkan timer (di server)
+# 2) install the units + enable the timer (on the server)
 sudo mv /tmp/forex-newsalert.service /tmp/forex-newsalert.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now forex-newsalert.timer
 
-# 3) cek
-systemctl list-timers forex-newsalert.timer       # kapan fire berikutnya
-sudo systemctl start forex-newsalert.service       # paksa satu evaluasi sekarang
+# 3) check
+systemctl list-timers forex-newsalert.timer       # when it fires next
+sudo systemctl start forex-newsalert.service       # force one evaluation now
 journalctl -u forex-newsalert.service -n 30 --no-pager
 ```
 
-Timer fire tiap 5 menit (`OnCalendar=*:0/5`, `Persistent=true` → run yang
-terlewat saat reboot tetap jalan). Self-decide pra/pasca + dedup → DST-proof
-(jam rilis diambil dari timestamp feed, bukan hardcode).
+The timer fires every 5 minutes (`OnCalendar=*:0/5`, `Persistent=true` → a run
+missed during a reboot still runs). It self-decides pre/post + dedup → DST-proof
+(release time is taken from the feed timestamp, not hardcoded).
 
-### Hari rilis: isi nowcast (opsional, "ancang-ancang pre-release")
+### Release day: fill in the nowcast (optional, "pre-release heads-up")
 
-Cleveland Fed nowcast (CPI) / ADP (NFP) belum di-fetch otomatis. Saat hari H,
-bisa override manual lewat env service atau jalankan sekali manual:
+The Cleveland Fed nowcast (CPI) / ADP (NFP) are not auto-fetched yet. On the day,
+you can override manually via the service env or run once manually:
 
 ```bash
-sudo systemctl stop forex-newsalert.timer    # opsional, hindari bentrok
+sudo systemctl stop forex-newsalert.timer    # optional, avoid a clash
 /opt/forex/newsalert -event CPI \
   -nowcast "Cleveland Fed: m/m +0.32%, y/y 4.1%" -prewindow 6h
 sudo systemctl start forex-newsalert.timer
 ```
 
-## Alternatif: jalankan via `alertd` dengan `-news` (1 daemon)
+## Alternative: run via `alertd` with `-news` (1 daemon)
 
-Sejak 2026-06-08 `alertd` bisa sekalian kirim alert news (reuse `internal/news`)
-→ cukup **1 daemon** (tak perlu timer/service `newsalert` terpisah). **Default
-`-news=false` = paritas** (perilaku alertd lama persis; tak ada fetch feed news).
-Aktifkan dengan menambah `-news` (+ flag `-news-*` opsional). Dedup news pakai
-file TERPISAH (`data/news_state.json`) dari `alert_state.json` alertd.
+Since 2026-06-08 `alertd` can also send news alerts (reusing `internal/news`)
+→ just **1 daemon** (no separate `newsalert` timer/service needed). **Default
+`-news=false` = parity** (exactly the old alertd behavior; no news feed fetch).
+Enable it by adding `-news` (+ optional `-news-*` flags). News dedup uses a
+SEPARATE file (`data/news_state.json`) from alertd's `alert_state.json`.
 
 ```ini
-# di forex-alertd.service, tambahkan flag -news ke ExecStart:
+# in forex-alertd.service, add the -news flag to ExecStart:
 ExecStart=/opt/forex/alertd -news -news-events CPI,PPI,NFP -news-state /opt/forex/data/news_state.json
 ```
 
-Flag alertd: `-news` (bool, default false), `-news-events` (CPI,PPI,NFP),
+alertd flags: `-news` (bool, default false), `-news-events` (CPI,PPI,NFP),
 `-news-prewindow` (60m), `-news-stale` (12h), `-news-nowcast`, `-news-state`,
-`-news-feedcache`, `-news-support`, `-news-bls` (fallback BLS), `-news-bls-key`.
-News dievaluasi tiap tick alertd (default 5m), independen dari pipeline OANDA
-(tetap jalan walau engine/cache bermasalah).
+`-news-feedcache`, `-news-support`, `-news-bls` (BLS fallback), `-news-bls-key`.
+News is evaluated on every alertd tick (default 5m), independent of the OANDA pipeline
+(it keeps running even if the engine/cache has issues).
 
-## Opsi lokal (Mac) — cron
+## Local option (Mac) — cron
 
-Kalau mau tes di Mac tanpa systemd (alertd Mac sudah di-disable, prod di AWS):
+If you want to test on the Mac without systemd (the Mac alertd is already disabled, prod is on AWS):
 
 ```bash
-# crontab -e — tiap 5 menit, load env lalu evaluasi
+# crontab -e — every 5 minutes, load env then evaluate
 */5 * * * * cd ~/Documents/xau-ict-engine && set -a && . ./.env && set +a && ./bin/newsalert -event CPI,PPI -state data/news_state.json >> /tmp/newsalert.log 2>&1
 ```
 
-## Flag penting
+## Key flags
 
-| Flag | Default | Fungsi |
+| Flag | Default | Function |
 |------|---------|--------|
-| `-event` | `CPI` | indikator dipantau (CSV): `CPI,PPI,NFP` |
-| `-prewindow` | `60m` | kirim ancang-ancang saat rilis tinggal ≤ ini |
-| `-stale` | `12h` | jangan kirim pasca-rilis bila rilis sudah lebih tua dari ini |
-| `-nowcast` | `""` | catatan leading indicator pra-rilis (manual) |
-| `-support` | `$4.350–4.500` | zona harga kunci di pesan |
-| `-dry` | `false` | cetak ke stdout, jangan kirim (tanpa env TG) |
-| `-simulate` | `""` | preview pasca-rilis dgn actual hipotetis `Judul=nilai,...` |
-| `-interval` | `0` | loop tiap durasi (alternatif timer); `0` = sekali |
+| `-event` | `CPI` | indicators to watch (CSV): `CPI,PPI,NFP` |
+| `-prewindow` | `60m` | send the heads-up when the release is ≤ this away |
+| `-stale` | `12h` | don't send post-release if the release is already older than this |
+| `-nowcast` | `""` | leading indicator note for pre-release (manual) |
+| `-support` | `$4.350–4.500` | key price zone in the message |
+| `-dry` | `false` | print to stdout, don't send (no TG env needed) |
+| `-simulate` | `""` | preview post-release with hypothetical actuals `Title=value,...` |
+| `-interval` | `0` | loop every duration (alternative to a timer); `0` = once |
