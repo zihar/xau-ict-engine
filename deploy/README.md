@@ -1,108 +1,108 @@
-# Deploy forex-alertd ke Oracle Cloud Free Tier (region Singapore)
+# Deploy forex-alertd to Oracle Cloud Free Tier (Singapore region)
 
-Panduan men-deploy daemon alert realtime `alertd` ke VM **Oracle Cloud Always Free**
-(ARM Ampere) di region **Singapore**. Alasan pilih SG: dari IP Indonesia, koneksi ke
-OANDA v20 sering labil; menjalankan daemon di region SG bikin reachability OANDA stabil
-**tanpa perlu VPN**.
+A guide to deploying the realtime alert daemon `alertd` to an **Oracle Cloud Always Free**
+VM (ARM Ampere) in the **Singapore** region. Why SG: from an Indonesian IP, the connection to
+OANDA v20 is often flaky; running the daemon in the SG region makes OANDA reachability stable
+**without needing a VPN**.
 
-Daemon di-manage lewat **Tailscale** sehingga **tidak perlu membuka port inbound** apa pun
-di VM (semua akses SSH/manajemen lewat alamat tailnet privat).
+The daemon is managed via **Tailscale**, so there is **no need to open any inbound port**
+on the VM (all SSH/management access goes through the private tailnet address).
 
 ---
 
-## 1. Provisioning VM (Always Free, ARM)
+## 1. VM provisioning (Always Free, ARM)
 
-1. Login ke Oracle Cloud Console. Pilih region **Singapore (ap-singapore-1)** di pojok
-   kanan atas.
+1. Log in to the Oracle Cloud Console. Select the **Singapore (ap-singapore-1)** region in the
+   top right corner.
 2. **Compute > Instances > Create Instance.**
-3. Shape: **VM.Standard.A1.Flex** (ARM Ampere — masuk kuota Always Free, mis. 1–4 OCPU /
-   6–24 GB RAM). Untuk daemon ringan cukup 1 OCPU / 6 GB.
-4. Image: **Ubuntu** (mis. Ubuntu 22.04/24.04 LTS, varian aarch64/ARM).
-5. Tambahkan SSH public key milikmu (untuk akses pertama kali sebelum Tailscale aktif).
-6. Networking: biarkan default. Karena manajemen lewat Tailscale, **tidak perlu**
-   menambah ingress rule selain SSH bootstrap (bahkan SSH publik bisa ditutup setelah
-   Tailscale jalan).
+3. Shape: **VM.Standard.A1.Flex** (ARM Ampere — within the Always Free quota, e.g. 1–4 OCPU /
+   6–24 GB RAM). For a lightweight daemon, 1 OCPU / 6 GB is enough.
+4. Image: **Ubuntu** (e.g. Ubuntu 22.04/24.04 LTS, the aarch64/ARM variant).
+5. Add your own SSH public key (for the first access before Tailscale is active).
+6. Networking: leave the defaults. Because management goes through Tailscale, there is **no need**
+   to add an ingress rule beyond the SSH bootstrap (the public SSH can even be closed once
+   Tailscale is running).
 
-### CAVEAT Always Free (penting)
+### Always Free CAVEAT (important)
 
-- **"Out of capacity"**: kapasitas shape A1 ARM di Always Free sering habis. Kalau gagal,
-  **retry** beberapa kali, atau coba **Availability Domain (AD) lain** di region SG.
-- **Idle reclaim**: instance Always Free yang dianggap idle bisa **di-reclaim** Oracle.
-  Solusi: **upgrade akun ke Pay-As-You-Go (PAYG)**. Resource Always Free **tetap gratis**
-  selama dalam batas Always Free, tapi instance tidak akan di-reclaim karena idle.
+- **"Out of capacity"**: the A1 ARM shape capacity in Always Free is often exhausted. If it fails,
+  **retry** a few times, or try **another Availability Domain (AD)** in the SG region.
+- **Idle reclaim**: an Always Free instance deemed idle can be **reclaimed** by Oracle.
+  Solution: **upgrade the account to Pay-As-You-Go (PAYG)**. Always Free resources **stay free**
+  as long as they are within the Always Free limits, but the instance will not be reclaimed for being idle.
 
 ---
 
-## 2. Cross-compile binary dari Mac
+## 2. Cross-compile the binary from the Mac
 
-Daemon di-build untuk arsitektur ARM64 Linux dari mesin lokal (Mac):
+The daemon is built for the ARM64 Linux architecture from the local machine (Mac):
 
 ```bash
 cd ~/Documents/xau-ict-engine
 GOOS=linux GOARCH=arm64 go build -o alertd ./cmd/alertd
 ```
 
-Hasilnya binary `alertd` (statik, std-lib only) siap dijalankan di VM ARM Ubuntu.
+The result is an `alertd` binary (static, std-lib only) ready to run on the ARM Ubuntu VM.
 
 ---
 
-## 3. Pasang Tailscale di VM
+## 3. Install Tailscale on the VM
 
-Akses pertama lewat SSH (IP publik + SSH key bootstrap), lalu pasang Tailscale:
+First access via SSH (public IP + SSH key bootstrap), then install Tailscale:
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 ```
 
-Ikuti URL login untuk menautkan VM ke tailnet. Catat **alamat Tailscale** VM
-(mis. `tailscale ip -4`). Setelah ini semua manajemen (SSH, scp) cukup lewat alamat
-tailnet privat — **tanpa membuka port inbound** apa pun.
+Follow the login URL to link the VM to the tailnet. Note the VM's **Tailscale address**
+(e.g. `tailscale ip -4`). After this, all management (SSH, scp) goes through the private
+tailnet address — **without opening any inbound port**.
 
 ---
 
-## 4. Kirim file ke VM via scp (lewat Tailscale)
+## 4. Send files to the VM via scp (over Tailscale)
 
-Siapkan direktori `/opt/forex` di VM, lalu kirim binary + data + konfigurasi.
-Ganti `<TAILSCALE_IP>` dengan alamat tailnet VM.
+Prepare the `/opt/forex` directory on the VM, then send the binary + data + configuration.
+Replace `<TAILSCALE_IP>` with the VM's tailnet address.
 
 ```bash
-# di VM (sekali):
+# on the VM (once):
 sudo mkdir -p /opt/forex/data
 sudo chown -R ubuntu:ubuntu /opt/forex
 
-# dari Mac:
+# from the Mac:
 scp alertd            ubuntu@<TAILSCALE_IP>:/opt/forex/
-scp -r data           ubuntu@<TAILSCALE_IP>:/opt/forex/      # cache candle awal
+scp -r data           ubuntu@<TAILSCALE_IP>:/opt/forex/      # initial candle cache
 scp .env              ubuntu@<TAILSCALE_IP>:/opt/forex/
 scp config.yaml       ubuntu@<TAILSCALE_IP>:/opt/forex/
 ```
 
-Pastikan layout akhir di VM:
+Make sure the final layout on the VM is:
 
 ```
 /opt/forex/
   alertd
   config.yaml
   .env
-  data/                 # termasuk alert_state.json (dibuat otomatis oleh alertd)
+  data/                 # including alert_state.json (created automatically by alertd)
 ```
 
 ---
 
-## 5. Kredensial Telegram
+## 5. Telegram credentials
 
-Daemon mengirim alert via bot Telegram. Dua nilai berikut dimasukkan ke `/opt/forex/.env`
-(lihat `.env.example` di root repo):
+The daemon sends alerts via a Telegram bot. The following two values go into `/opt/forex/.env`
+(see `.env.example` in the repo root):
 
-- **TELEGRAM_BOT_TOKEN** — buat bot baru lewat **@BotFather** di Telegram
-  (`/newbot` → ikuti prompt → BotFather kasih token).
-- **TELEGRAM_CHAT_ID** — chat ID tujuan alert. Dua cara:
-  - Kirim pesan apa pun ke bot kamu, lalu buka
-    `https://api.telegram.org/bot<TOKEN>/getUpdates` dan baca `message.chat.id`.
-  - Atau chat ke **@userinfobot** yang langsung menampilkan ID kamu.
+- **TELEGRAM_BOT_TOKEN** — create a new bot via **@BotFather** on Telegram
+  (`/newbot` → follow the prompts → BotFather gives you a token).
+- **TELEGRAM_CHAT_ID** — the destination chat ID for alerts. Two ways:
+  - Send any message to your bot, then open
+    `https://api.telegram.org/bot<TOKEN>/getUpdates` and read `message.chat.id`.
+  - Or chat with **@userinfobot**, which shows your ID directly.
 
-Contoh `/opt/forex/.env` (lengkapi nilai yang masih kosong):
+Example `/opt/forex/.env` (fill in the values that are still empty):
 
 ```
 OANDA_TOKEN=...
@@ -114,53 +114,53 @@ TELEGRAM_CHAT_ID=...
 
 ---
 
-## 6. Pastikan time sync aktif (wajib untuk align candle 5m)
+## 6. Make sure time sync is active (required to align 5m candles)
 
-Alignment candle 5 menit bergantung pada jam sistem yang akurat. Pastikan time sync hidup:
+The 5-minute candle alignment depends on an accurate system clock. Make sure time sync is running:
 
 ```bash
-# systemd-timesyncd (default Ubuntu):
+# systemd-timesyncd (Ubuntu default):
 sudo systemctl enable --now systemd-timesyncd
-timedatectl status        # cek "System clock synchronized: yes"
+timedatectl status        # check "System clock synchronized: yes"
 
-# alternatif: chrony
+# alternative: chrony
 # sudo apt-get install -y chrony && sudo systemctl enable --now chrony
 ```
 
 ---
 
-## 7. Setup systemd service
+## 7. Set up the systemd service
 
-Salin unit ke systemd, reload, lalu enable + start:
+Copy the unit into systemd, reload, then enable + start:
 
 ```bash
-sudo cp /opt/forex/deploy/forex-alertd.service /etc/systemd/system/   # atau scp unit-nya
+sudo cp /opt/forex/deploy/forex-alertd.service /etc/systemd/system/   # or scp the unit
 sudo systemctl daemon-reload
 sudo systemctl enable --now forex-alertd
 ```
 
-Pantau log:
+Monitor the logs:
 
 ```bash
 journalctl -u forex-alertd -f
 ```
 
-Unit `forex-alertd.service` menjalankan:
+The `forex-alertd.service` unit runs:
 
 ```
 /opt/forex/alertd -dir /opt/forex/data -config /opt/forex/config.yaml -state /opt/forex/data/alert_state.json
 ```
 
-dengan `Restart=always` / `RestartSec=10` sehingga daemon otomatis bangkit lagi setelah
-crash atau reboot.
+with `Restart=always` / `RestartSec=10` so the daemon comes back automatically after
+a crash or reboot.
 
 ---
 
-## Ringkasan operasional
+## Operational summary
 
-- **Akses VM**: hanya lewat Tailscale (tanpa port inbound publik).
-- **Update binary**: build ulang di Mac (`GOOS=linux GOARCH=arm64`), `scp` ke
-  `/opt/forex/alertd`, lalu `sudo systemctl restart forex-alertd`.
-- **State alert** (`data/alert_state.json`) persisten antar-run → dedup alert tetap jalan
-  meski daemon restart.
-- **OANDA read-only**: daemon hanya menarik data; tidak ada eksekusi order.
+- **VM access**: only via Tailscale (no public inbound port).
+- **Updating the binary**: rebuild on the Mac (`GOOS=linux GOARCH=arm64`), `scp` to
+  `/opt/forex/alertd`, then `sudo systemctl restart forex-alertd`.
+- **Alert state** (`data/alert_state.json`) persists across runs → alert dedup keeps working
+  even when the daemon restarts.
+- **OANDA read-only**: the daemon only pulls data; there is no order execution.

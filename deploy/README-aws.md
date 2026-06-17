@@ -1,104 +1,104 @@
-# Deploy forex-alertd ke AWS EC2 Free Trial (region Singapore)
+# Deploy forex-alertd to AWS EC2 Free Trial (Singapore region)
 
-Panduan men-deploy daemon alert realtime `alertd` ke VM **AWS EC2** di region
-**Singapore (ap-southeast-1)**. Alasan pilih SG: dari IP Indonesia koneksi ke OANDA v20
-sering labil; daemon di region SG bikin reachability OANDA stabil **tanpa VPN**.
+A guide to deploying the realtime alert daemon `alertd` to an **AWS EC2** VM in the
+**Singapore (ap-southeast-1)** region. Why SG: from an Indonesian IP the connection to OANDA v20
+is often flaky; the daemon in the SG region makes OANDA reachability stable **without a VPN**.
 
-> **Kenapa AWS (bukan Oracle/Azure):** Oracle ditolak anti-fraud; Azure tidak eligible free
-> tier (cuma PAYG ~$12/bln). AWS akun **Free Plan** baru (post Jul-2025) dapat **kredit ~$120**, dan
-> **`t4g.small` punya free trial 750 jam/bln → compute $0** (terverifikasi: `BoxUsage:t4g.small`=$0).
-> ⚠️ Trial ini **khusus `t4g.small`** (BUKAN `t4g.micro`). `t4g.small` = ARM/aarch64 → cross-compile `arm64`.
+> **Why AWS (not Oracle/Azure):** Oracle was rejected by anti-fraud; Azure is not eligible for the free
+> tier (only PAYG ~$12/mo). A new AWS **Free Plan** account (post Jul-2025) gets **~$120 in credits**, and
+> **`t4g.small` has a 750 hr/mo free trial → compute $0** (verified: `BoxUsage:t4g.small`=$0).
+> ⚠️ This trial is **specific to `t4g.small`** (NOT `t4g.micro`). `t4g.small` = ARM/aarch64 → cross-compile `arm64`.
 >
-> **⚠️ DEADLINE MENGIKAT = 6 Des 2026** (bukan 31 Des). Dashboard Free Plan: "183 days remaining,
-> Dec 06 2026 — access ends when credits depleted or free period ends". Kredit & free period
-> dua-duanya berakhir **6 Des 2026**. Lihat §8 di bawah.
+> **⚠️ BINDING DEADLINE = 6 Dec 2026** (not 31 Dec). Free Plan dashboard: "183 days remaining,
+> Dec 06 2026 — access ends when credits depleted or free period ends". Both the credits & the free period
+> end on **6 Dec 2026**. See §8 below.
 >
-> **Setup arsip Oracle ada di [`README.md`](README.md)** (dipertahankan sebagai referensi).
+> **The archived Oracle setup is in [`README.md`](README.md)** (kept as a reference).
 
-**Status aktual:** dideploy 2026-06-06. Public IP `<EC2_PUBLIC_IP>`, user `ubuntu`,
-key `~/Projects/xau-ict-engine/forex-key.pem`. Daemon Mac (launchd) dimatikan saat pindah ke sini.
+**Actual status:** deployed 2026-06-06. Public IP `<EC2_PUBLIC_IP>`, user `ubuntu`,
+key `~/Projects/xau-ict-engine/forex-key.pem`. The Mac daemon (launchd) was turned off when moving here.
 
-> **⚠️ Akses SSH dari jaringan yang memblok port 22:** sebagian jaringan memblok outbound
-> **port 22** (gejala: `nc <EC2_PUBLIC_IP> 22` timeout, tapi `:443` succeed lewat proxy). Dari
-> jaringan seperti itu, SSH HARUS lewat **VPN atau tethering HP seluler**. IP publik dinamis →
-> tiap ganti jaringan, **tambah IP baru ke security group dulu** (lihat §Ringkasan operasional)
-> baru SSH jalan.
+> **⚠️ SSH access from a network that blocks port 22:** some networks block outbound
+> **port 22** (symptom: `nc <EC2_PUBLIC_IP> 22` times out, but `:443` succeeds via a proxy). From
+> such a network, SSH MUST go through a **VPN or mobile phone tethering**. The public IP is dynamic →
+> each time you change networks, **add the new IP to the security group first** (see §Operational summary)
+> before SSH will work.
 
 ---
 
-## 1. Provisioning VM (EC2 t4g.small)
+## 1. VM provisioning (EC2 t4g.small)
 
-Console AWS → pastikan region kanan-atas = **Asia Pacific (Singapore) ap-southeast-1** →
+AWS Console → make sure the top-right region = **Asia Pacific (Singapore) ap-southeast-1** →
 **EC2 → Launch instance**:
 
 1. **Name:** `forex-alertd`.
-2. **AMI:** Ubuntu Server 24.04 LTS, arsitektur **64-bit (Arm)** — wajib Arm (t4g = ARM).
-3. **Instance type:** **`t4g.small`** (2 vCPU / 2 GB). ⚠️ JANGAN `t4g.micro` — yang punya
-   free trial s/d Des 2026 adalah `t4g.small`.
-4. **Key pair:** Create new key pair (RSA, `.pem`) → download & simpan (`forex-key.pem`).
-5. **Network/Security group:** allow **SSH (22)** dari **My IP**. Tidak perlu buka port lain
-   (daemon outbound-only).
-6. **Storage:** **8 GiB gp3** (cache OANDA cuma ~26 MB, tumbuh ~7 MB/thn → 8 GB lebih dari cukup).
-7. **Launch instance.** Catat **Public IPv4**.
+2. **AMI:** Ubuntu Server 24.04 LTS, **64-bit (Arm)** architecture — Arm is required (t4g = ARM).
+3. **Instance type:** **`t4g.small`** (2 vCPU / 2 GB). ⚠️ DO NOT use `t4g.micro` — the one with the
+   free trial through Dec 2026 is `t4g.small`.
+4. **Key pair:** Create new key pair (RSA, `.pem`) → download & save (`forex-key.pem`).
+5. **Network/Security group:** allow **SSH (22)** from **My IP**. No need to open other ports
+   (the daemon is outbound-only).
+6. **Storage:** **8 GiB gp3** (the OANDA cache is only ~26 MB, growing ~7 MB/yr → 8 GB is more than enough).
+7. **Launch instance.** Note the **Public IPv4**.
 
-### CAVEAT biaya (penting)
+### Cost CAVEAT (important)
 
-- **Free Plan + kredit berakhir 6 Des 2026.** Setelahnya HARUS upgrade Paid plan → PAYG **~$16/bln**
-  (compute t4g.small ~$12 + IPv4 ~$3.6 + EBS ~$0.64) atau pindah Vultr SG ~$5/bln. Lihat §8.
-- **Biaya berjalan sekarang ~$4.2/bln gross** (IPv4 ~$3.6 + EBS 8GB ~$0.64; compute $0 via trial),
-  **seluruhnya ditutup kredit → net $0**. Sampai deadline cuma terpakai sebagian kecil kredit →
-  sisanya **hangus** (yang mengikat = tanggalnya, bukan saldo).
-- **Cek cost via CLI:** `get-cost-and-usage` group-by SERVICE tanpa filter = Usage(+) & Credit(−) net
-  jadi ~$0 (menyesatkan). Untuk GROSS asli filter `RECORD_TYPE=Usage`. Set juga **Budget alert**
-  (Billing → Budgets → *Zero spend budget*) untuk jaga-jaga.
+- **Free Plan + credits end 6 Dec 2026.** After that you MUST upgrade to a Paid plan → PAYG **~$16/mo**
+  (t4g.small compute ~$12 + IPv4 ~$3.6 + EBS ~$0.64) or move to Vultr SG ~$5/mo. See §8.
+- **Current running cost ~$4.2/mo gross** (IPv4 ~$3.6 + EBS 8GB ~$0.64; compute $0 via trial),
+  **all covered by credits → net $0**. Until the deadline only a small fraction of the credit is used →
+  the rest **expires** (what binds is the date, not the balance).
+- **Check cost via CLI:** `get-cost-and-usage` grouped by SERVICE with no filter nets Usage(+) & Credit(−)
+  to ~$0 (misleading). For the true GROSS, filter `RECORD_TYPE=Usage`. Also set a **Budget alert**
+  (Billing → Budgets → *Zero spend budget*) just in case.
 
 ---
 
-## 2. Cross-compile binary dari Mac (arm64)
+## 2. Cross-compile the binary from the Mac (arm64)
 
 ```bash
 cd ~/Projects/xau-ict-engine
 GOOS=linux GOARCH=arm64 go build -o /tmp/alertd ./cmd/alertd   # t4g = ARM/aarch64
 ```
 
-Binary statik (std-lib only) → tak perlu install Go di VM.
+Static binary (std-lib only) → no need to install Go on the VM.
 
 ---
 
-## 3. Kirim file ke VM (scp)
+## 3. Send files to the VM (scp)
 
 ```bash
 KEY=~/Projects/xau-ict-engine/forex-key.pem
-HOST=ubuntu@<EC2_PUBLIC_IP>                       # ganti dgn Public IPv4-mu
-chmod 400 $KEY                                 # permission key (sekali)
+HOST=ubuntu@<EC2_PUBLIC_IP>                       # replace with your Public IPv4
+chmod 400 $KEY                                 # key permission (once)
 
-# snapshot cache (data/ adalah symlink → resolve dgn -L)
+# snapshot the cache (data/ is a symlink → resolve with -L)
 cp -RL ~/Projects/xau-ict-engine/data/XAU_USD /tmp/forex-data
 
-# layout di VM (sekali)
+# layout on the VM (once)
 ssh -i $KEY $HOST 'sudo mkdir -p /opt/forex/data/XAU_USD && sudo chown -R ubuntu:ubuntu /opt/forex'
 
-# kirim binary + config + env + unit + cache
+# send binary + config + env + unit + cache
 scp -i $KEY /tmp/alertd config.yaml .env deploy/forex-alertd.service $HOST:/opt/forex/
 scp -i $KEY /tmp/forex-data/*.csv $HOST:/opt/forex/data/XAU_USD/
 ```
 
-Layout akhir:
+Final layout:
 
 ```
 /opt/forex/
   alertd
   config.yaml
   .env
-  data/XAU_USD/{W,D,H4,H1,M15,M5}.csv   # + alert_state.json (dibuat otomatis)
+  data/XAU_USD/{W,D,H4,H1,M15,M5}.csv   # + alert_state.json (created automatically)
   forex-alertd.service
 ```
 
 ---
 
-## 4. Kredensial Telegram (`/opt/forex/.env`)
+## 4. Telegram credentials (`/opt/forex/.env`)
 
-Sama seperti setup Oracle — lihat [`README.md` §5](README.md). Minimal isi:
+Same as the Oracle setup — see [`README.md` §5](README.md). Minimum contents:
 
 ```
 OANDA_TOKEN=...
@@ -109,136 +109,136 @@ TELEGRAM_CHAT_ID=...
 
 ---
 
-## 5. Time sync (chrony — bawaan AWS)
+## 5. Time sync (chrony — AWS default)
 
-AWS Ubuntu **sudah pakai chrony** (Amazon Time Sync `169.254.169.123`) — `systemd-timesyncd`
-TIDAK ada di image ini dan **tak perlu** dipasang. Cukup verifikasi:
+AWS Ubuntu **already uses chrony** (Amazon Time Sync `169.254.169.123`) — `systemd-timesyncd`
+is NOT present in this image and **does not need** to be installed. Just verify:
 
 ```bash
-timedatectl status        # cek "System clock synchronized: yes" & "NTP service: active"
-chronyc tracking          # opsional, lihat sumber waktu
+timedatectl status        # check "System clock synchronized: yes" & "NTP service: active"
+chronyc tracking          # optional, view the time source
 ```
 
 ---
 
-## 6. Setup systemd service
+## 6. Set up the systemd service
 
-Unit `deploy/forex-alertd.service` sudah `User=ubuntu` → **cocok apa adanya** untuk AMI AWS
-(beda dari rencana Azure yang butuh `azureuser`).
+The `deploy/forex-alertd.service` unit already has `User=ubuntu` → **fits as-is** for the AWS AMI
+(unlike the Azure plan, which needed `azureuser`).
 
 ```bash
 ssh -i $KEY $HOST 'sudo cp /opt/forex/forex-alertd.service /etc/systemd/system/ && \
   sudo systemctl daemon-reload && sudo systemctl enable --now forex-alertd'
-journalctl -u forex-alertd -f      # pantau log
+journalctl -u forex-alertd -f      # monitor the logs
 ```
 
-`Restart=always` / `RestartSec=10` → daemon bangkit otomatis setelah crash/reboot.
+`Restart=always` / `RestartSec=10` → the daemon comes back automatically after a crash/reboot.
 
 ---
 
-## 7. Verifikasi end-to-end
+## 7. End-to-end verification
 
 ```bash
 ssh -i $KEY $HOST 'systemctl is-active forex-alertd'            # active
-# dari Telegram: kirim /watchlist ke bot → harus balas watchlist
-ssh -i $KEY $HOST 'sudo reboot'                                  # uji persistence
-# tunggu ~40s, reconnect:
-ssh -i $KEY $HOST 'systemctl is-active forex-alertd; uptime -p'  # active setelah reboot
+# from Telegram: send /watchlist to the bot → it should reply with the watchlist
+ssh -i $KEY $HOST 'sudo reboot'                                  # test persistence
+# wait ~40s, reconnect:
+ssh -i $KEY $HOST 'systemctl is-active forex-alertd; uptime -p'  # active after reboot
 ```
 
 ---
 
-## 8. Reminder deadline Free Plan (6 Des 2026)
+## 8. Free Plan deadline reminder (6 Dec 2026)
 
-Free Plan + kredit berakhir **6 Des 2026** (dashboard: "183 days remaining, Dec 06 2026"). Dua
-reminder dipasang (lokal/AWS, **bukan** claude.ai), dimajukan agar mengingatkan SEBELUM 6 Des:
+The Free Plan + credits end on **6 Dec 2026** (dashboard: "183 days remaining, Dec 06 2026"). Two
+reminders are set up (local/AWS, **not** claude.ai), brought forward to remind BEFORE 6 Dec:
 
-- **VM AWS — systemd timer.** `/opt/forex/remind-trial.sh` (curl Telegram pakai
-  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` dari `.env`), dipicu `forex-remind.timer`:
+- **AWS VM — systemd timer.** `/opt/forex/remind-trial.sh` (curl Telegram using
+  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` from `.env`), triggered by `forex-remind.timer`:
 
   ```ini
   # /etc/systemd/system/forex-remind.timer
   [Timer]
-  OnCalendar=2026-12-01 01:00:00   # 08:00 WIB (VM = UTC) — H-5 sebelum 6 Des
+  OnCalendar=2026-12-01 01:00:00   # 08:00 WIB (VM = UTC) — 5 days before 6 Dec
   Persistent=true
   ```
   ```bash
   sudo systemctl enable --now forex-remind.timer
   systemctl list-timers forex-remind.timer
   ```
-- **Calendar Mac.** Event 1 Des 2026 08:00 + alarm H-3 & hari-H (file `.ics` di-`open`).
+- **Mac Calendar.** Event 1 Dec 2026 08:00 + alarms 3 days before & on the day (`.ics` file `open`ed).
 
-Saat reminder fire, putuskan: **(a)** upgrade Paid plan **~$16/bln** (compute ~$12 + IPv4 ~$3.6 +
-EBS ~$0.64; ⚠️ upgrade via Billing→Account, JANGAN lewat join Organization/Control Tower → kredit
-hangus), **(b)** pindah **Vultr Singapore + PayPal** ~$5/bln permanen (langkah identik, admin user
-`root`), atau **(c)** matikan/destroy instance. Kalau pindah/destroy: snapshot `.env` + `data/`
-dulu; daemon Mac bisa dihidupkan lagi (plist masih ada tapi **di-disable 2026-06-08** →
+When the reminder fires, decide: **(a)** upgrade to a Paid plan **~$16/mo** (compute ~$12 + IPv4 ~$3.6 +
+EBS ~$0.64; ⚠️ upgrade via Billing→Account, DO NOT go through joining an Organization/Control Tower → credits
+expire), **(b)** move to **Vultr Singapore + PayPal** ~$5/mo permanently (identical steps, admin user
+`root`), or **(c)** stop/destroy the instance. If you move/destroy: snapshot `.env` + `data/`
+first; the Mac daemon can be turned back on (the plist is still there but was **disabled on 2026-06-08** →
 `launchctl enable gui/$(id -u)/id.zihar.forex-alertd && launchctl bootstrap gui/$(id -u)
 ~/Library/LaunchAgents/id.zihar.forex-alertd.plist`).
 
 ---
 
-## 9. Auto-deploy saat `git push` (pull-based)
+## 9. Auto-deploy on `git push` (pull-based)
 
-Tiap `git push` ke `origin/main`, EC2 menarik & deploy sendiri. Repo **public** → EC2
-fetch anonim via **HTTPS, tanpa deploy key / kredensial apa pun**, **tanpa** membuka port
-(outbound-only), biaya AWS **$0** (compute t4g.small ditutup free trial, transfer git diabaikan).
+On every `git push` to `origin/main`, EC2 pulls & deploys itself. The repo is **public** → EC2
+fetches anonymously via **HTTPS, with no deploy key / no credentials at all**, **without** opening a port
+(outbound-only), AWS cost **$0** (t4g.small compute is covered by the free trial, git transfer is negligible).
 
-**Cara kerja:** `forex-deploy.timer` memicu `/opt/forex/deploy.sh` (sbg root) tiap **1 menit**.
-Tiap tick `git fetch` membandingkan SHA `origin/main` vs lokal — kalau sama, diam (sub-detik).
-Kalau ada commit baru → `git reset --hard origin/main` → **build arm64 native di EC2**
-(std-lib only, tak ada fetch modul) → install binary atomik → sync `config.yaml` + unit
-`forex-alertd.service` (kalau berubah) → `systemctl restart forex-alertd`. Skrip ikut
-self-update (mv atomik) jadi perubahan `deploy.sh` ikut ter-deploy.
+**How it works:** `forex-deploy.timer` triggers `/opt/forex/deploy.sh` (as root) every **1 minute**.
+Each tick `git fetch` compares the `origin/main` SHA vs local — if they match, it does nothing (sub-second).
+If there is a new commit → `git reset --hard origin/main` → **build arm64 native on EC2**
+(std-lib only, no module fetch) → atomic binary install → sync `config.yaml` + the
+`forex-alertd.service` unit (if changed) → `systemctl restart forex-alertd`. The script also
+self-updates (atomic mv), so changes to `deploy.sh` are deployed too.
 
-### Setup sekali (di EC2)
+### One-time setup (on EC2)
 
 ```bash
-ssh -i ~/Projects/xau-ict-engine/forex-key.pem ubuntu@<EC2_PUBLIC_IP>   # via VPN/tethering dari kantor
+ssh -i ~/Projects/xau-ict-engine/forex-key.pem ubuntu@<EC2_PUBLIC_IP>   # via VPN/tethering from the office
 
-# salin skrip setup ke VM (atau ambil dari repo setelah clone perdana)
-scp -i ~/path/ke/forex-key.pem \
+# copy the setup script to the VM (or fetch it from the repo after the first clone)
+scp -i ~/path/to/forex-key.pem \
   deploy/setup-autodeploy.sh ubuntu@<EC2_PUBLIC_IP>:/tmp/
 
-# install Go, clone repo (HTTPS anonim), pasang & enable timer, build perdana
+# install Go, clone the repo (anonymous HTTPS), install & enable the timer, first build
 sudo bash /tmp/setup-autodeploy.sh
 ```
 
-Repo public → tak perlu deploy key. Skrip langsung clone via HTTPS dalam sekali jalan.
+Public repo → no deploy key needed. The script clones via HTTPS directly in one run.
 
-Selesai — mulai sekarang cukup `git push`, ~1 menit kemudian live.
+Done — from now on just `git push`, and ~1 minute later it's live.
 
-### Operasi
+### Operations
 
 ```bash
-systemctl list-timers forex-deploy.timer    # next-run timer
-journalctl -u forex-deploy -f               # log tiap deploy (build/restart)
-sudo systemctl start forex-deploy.service   # paksa deploy sekarang (tak nunggu tick)
-sudo systemctl disable --now forex-deploy.timer   # matikan auto-deploy (balik ke manual §Ringkasan)
+systemctl list-timers forex-deploy.timer    # timer next-run
+journalctl -u forex-deploy -f               # log of each deploy (build/restart)
+sudo systemctl start forex-deploy.service   # force a deploy now (don't wait for a tick)
+sudo systemctl disable --now forex-deploy.timer   # turn off auto-deploy (back to manual §Summary)
 ```
 
-> ⚠️ Layout EC2 jadi: `/opt/forex/repo` (clone read-only) + `/opt/forex/{alertd,config.yaml,.env,data/}`
-> (runtime). `.env` & `data/` **tidak** di repo → tak pernah ditimpa deploy. Disk: Go toolchain
-> ~450 MB + build cache → cek `df -h /` masih lega di volume 8 GB (Ubuntu ~3 GB; cukup).
+> ⚠️ The EC2 layout becomes: `/opt/forex/repo` (read-only clone) + `/opt/forex/{alertd,config.yaml,.env,data/}`
+> (runtime). `.env` & `data/` are **not** in the repo → never overwritten by a deploy. Disk: the Go toolchain
+> ~450 MB + build cache → check `df -h /` still has room on the 8 GB volume (Ubuntu ~3 GB; enough).
 
-## Ringkasan operasional
+## Operational summary
 
-- **Akses VM:** `ssh -i ~/Projects/xau-ict-engine/forex-key.pem ubuntu@<EC2_PUBLIC_IP>`
-  (SSH 22 dibatasi ke IP ter-whitelist; **dari kantor butuh VPN/tethering** — port 22 diblok).
-  **Tambah IP saat ini ke whitelist** (AWS CLI, region ap-southeast-1):
+- **VM access:** `ssh -i ~/Projects/xau-ict-engine/forex-key.pem ubuntu@<EC2_PUBLIC_IP>`
+  (SSH 22 is restricted to whitelisted IPs; **from the office you need VPN/tethering** — port 22 is blocked).
+  **Add the current IP to the whitelist** (AWS CLI, region ap-southeast-1):
   ```bash
   MYIP=$(curl -s https://api.ipify.org)
   aws ec2 authorize-security-group-ingress --group-id <SECURITY_GROUP_ID> \
     --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$MYIP/32,Description=zihar}]"
-  # lihat rules: aws ec2 describe-security-groups --group-ids <SECURITY_GROUP_ID> \
+  # view rules: aws ec2 describe-security-groups --group-ids <SECURITY_GROUP_ID> \
   #   --query 'SecurityGroups[].IpPermissions[].IpRanges[]' --output table
   ```
-- **Update binary:**
+- **Updating the binary:**
   ```bash
   GOOS=linux GOARCH=arm64 go build -o /tmp/alertd ./cmd/alertd
   scp -i $KEY /tmp/alertd ubuntu@<EC2_PUBLIC_IP>:/opt/forex/
   ssh -i $KEY ubuntu@<EC2_PUBLIC_IP> 'sudo systemctl restart forex-alertd'
   ```
-- **State alert** (`data/XAU_USD/alert_state.json`) persisten antar-run → dedup tetap jalan.
-- **OANDA read-only:** daemon hanya menarik data; tidak ada eksekusi order.
-- **Hemat biaya:** cuma 1 instance (750 jam/bln free trial ≈ 1 VM 24/7; instance kedua = lewat kuota).
+- **Alert state** (`data/XAU_USD/alert_state.json`) persists across runs → dedup keeps working.
+- **OANDA read-only:** the daemon only pulls data; there is no order execution.
+- **Cost savings:** only 1 instance (750 hr/mo free trial ≈ 1 VM 24/7; a second instance = over quota).
