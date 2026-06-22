@@ -39,15 +39,16 @@ const dailyAlign = 18
 
 func main() {
 	var (
-		instrument = flag.String("instrument", "XAU_USD", "instrumen")
-		dir        = flag.String("dir", "data", "direktori cache CSV")
-		cfgPath    = flag.String("config", "", "path config.yaml (kosong = engine.DefaultConfig)")
-		interval   = flag.Duration("interval", 5*time.Minute, "jeda antar poll (loop mode)")
-		once       = flag.Bool("once", false, "jalankan satu siklus lalu keluar")
-		statePath  = flag.String("state", "data/alert_state.json", "file state dedup alert")
-		freshness  = flag.Duration("freshness", 6*time.Minute, "umur maks sinyal terbaru agar tetap di-alert")
-		fromStr    = flag.String("from", "2022-01-01", "tanggal bootstrap (YYYY-MM-DD) kalau cache kosong")
-		heartbeat  = flag.Bool("heartbeat", false, "kirim watchlist tiap H1 close walau daftar tak berubah (default OFF — user 2026-06-02: anti-spam, kirim hanya saat perubahan bermakna)")
+		instrument  = flag.String("instrument", "XAU_USD", "instrumen")
+		dir         = flag.String("dir", "data", "direktori cache CSV")
+		cfgPath     = flag.String("config", "", "path config.yaml (kosong = engine.DefaultConfig)")
+		interval    = flag.Duration("interval", 5*time.Minute, "jeda antar poll (loop mode)")
+		once        = flag.Bool("once", false, "jalankan satu siklus lalu keluar")
+		statePath   = flag.String("state", "data/alert_state.json", "file state dedup alert")
+		freshness   = flag.Duration("freshness", 6*time.Minute, "umur maks sinyal terbaru agar tetap di-alert")
+		fromStr     = flag.String("from", "2022-01-01", "tanggal bootstrap (YYYY-MM-DD) kalau cache kosong")
+		heartbeat   = flag.Bool("heartbeat", false, "kirim watchlist tiap H1 close walau daftar tak berubah (default OFF — user 2026-06-02: anti-spam, kirim hanya saat perubahan bermakna)")
+		noWatchlist = flag.Bool("no-watchlist", false, "matikan seluruh alert otomatis blok watchlist (POI per-TF + AMS ITL/ITH); /watchlist manual tetap jalan (default OFF = perilaku lama)")
 
 		// --- News alert (reuse internal/news; default OFF = paritas perilaku lama) ---
 		newsEnabled   = flag.Bool("news", false, "aktifkan alert news CPI/PPI/NFP via internal/news (default OFF = perilaku alertd lama persis)")
@@ -110,6 +111,7 @@ func main() {
 		freshness:     *freshness,
 		bootstrapFrom: bootstrapFrom,
 		heartbeat:     *heartbeat,
+		noWatchlist:   *noWatchlist,
 		interval:      *interval,
 		tg:            notifier,
 		chatID:        tgChatID,
@@ -167,6 +169,7 @@ type daemon struct {
 	freshness     time.Duration
 	bootstrapFrom time.Time
 	heartbeat     bool             // kirim watchlist tiap H1 close walau daftar tak berubah
+	noWatchlist   bool             // matikan seluruh alert otomatis blok watchlist (POI per-TF + AMS); /watchlist manual tetap
 	interval      time.Duration    // jeda poll — basis ambang deteksi gap offline
 	tg            *notify.Telegram // akses getUpdates (perintah bot /watchlist)
 	chatID        string           // chat terdaftar — perintah dari chat lain diabaikan
@@ -319,86 +322,92 @@ func (d *daemon) runOnce() {
 	// MO HARIAN yang rutin (terbentuk 00:00 NY / hilang saat Asia) TIDAK memicu
 	// — state di-update diam-diam. Heartbeat per H1 tersedia via -heartbeat
 	// (default OFF). Diff message tetap mem-bold apa yang berubah.
-	fp := watchlistFingerprint(n)
-	changed := watchlistTrigger(st.LastWatchlist, fp)
-	newH1 := len(n.Steps) > 0 && n.At.After(st.LastWatchlistH1)
+	// -no-watchlist mematikan seluruh blok ini (POI per-TF + AMS); /watchlist
+	// manual tetap jalan via watchCommands.
+	if !d.noWatchlist {
+		fp := watchlistFingerprint(n)
+		changed := watchlistTrigger(st.LastWatchlist, fp)
+		newH1 := len(n.Steps) > 0 && n.At.After(st.LastWatchlistH1)
 
-	msg, aksi := "", ""
-	switch {
-	case changed && adaZona && st.LastWatchlist == "":
-		// Kiriman perdana (state kosong) — tanpa diff, semua zona memang "baru".
-		msg = fmt.Sprintf("🆕 *Watchlist %s — kiriman pertama*\n%s", d.instrument, wlBlock)
-		aksi = fmt.Sprintf("kiriman pertama, %d zona", len(n.NextPOIsByTF))
-	case changed && adaZona:
-		diff, _ := watchlistDiff(st.LastWatchlist, n)
-		msg = "⚠️ *ADA PERUBAHAN*"
-		if offNote != "" {
-			msg += "\n" + offNote
-		}
-		for _, dl := range diff {
-			msg += "\n• *" + dl + "*"
-		}
-		msg += "\n" + wlBlock
-		aksi = fmt.Sprintf("daftar berubah, %d zona", len(n.NextPOIsByTF))
-	case changed && fpHasZones(st.LastWatchlist):
-		msg = fmt.Sprintf("📍 *Watchlist POI per TF — %s*\n⚠️ *Semua zona pantauan hilang (jebol/tak valid lagi).* Harga: `%.2f`",
-			d.instrument, n.Price)
-		if offNote != "" {
-			msg += "\n" + offNote
-		}
-		aksi = "semua zona hilang"
-	case changed:
-		// Tak ada zona POI, tapi fingerprint berubah. Kirim HANYA bila ada perubahan
-		// AMS (ITL/ITH terbentuk/break — Pertemuan 6); selain itu (run perdana / token
-		// rutin) catat diam-diam supaya tak spam.
-		diff, _ := watchlistDiff(st.LastWatchlist, n)
-		var amsLines []string
-		for _, dl := range diff {
-			if strings.HasPrefix(dl, "AMS") {
-				amsLines = append(amsLines, dl)
-			}
-		}
-		if len(amsLines) > 0 {
-			msg = "⚠️ *AMS BERUBAH*"
+		msg, aksi := "", ""
+		switch {
+		case changed && adaZona && st.LastWatchlist == "":
+			// Kiriman perdana (state kosong) — tanpa diff, semua zona memang "baru".
+			msg = fmt.Sprintf("🆕 *Watchlist %s — kiriman pertama*\n%s", d.instrument, wlBlock)
+			aksi = fmt.Sprintf("kiriman pertama, %d zona", len(n.NextPOIsByTF))
+		case changed && adaZona:
+			diff, _ := watchlistDiff(st.LastWatchlist, n)
+			msg = "⚠️ *ADA PERUBAHAN*"
 			if offNote != "" {
 				msg += "\n" + offNote
 			}
-			for _, dl := range amsLines {
+			for _, dl := range diff {
 				msg += "\n• *" + dl + "*"
 			}
 			msg += "\n" + wlBlock
-			aksi = "AMS berubah (tanpa zona)"
-		} else {
-			st.LastWatchlist = fp // run perdana, daftar kosong → catat saja
-			stChanged = true
-		}
-	case fp != st.LastWatchlist:
-		// Hanya transisi MO harian (none↔side) — bukan trigger; catat diam-diam
-		// supaya tidak menumpuk jadi "crossing" palsu di tick berikutnya.
-		st.LastWatchlist = fp
-		stChanged = true
-		log.Printf("tick: watchlist aksi=skip_mo_harian (transisi MO rutin, tanpa pesan)")
-	case d.heartbeat && newH1 && adaZona:
-		msg = fmt.Sprintf("ℹ️ *Tidak ada perubahan zona (heartbeat)*\n%s", wlBlock)
-		aksi = fmt.Sprintf("heartbeat H1, %d zona tak berubah", len(n.NextPOIsByTF))
-	case d.heartbeat && newH1:
-		st.LastWatchlistH1 = n.At // candle baru tapi memang tak ada zona — catat saja
-		stChanged = true
-		log.Printf("tick: watchlist aksi=skip_kosong (candle H1 baru, tak ada zona)")
-	default:
-		// Transparansi log: tanpa baris ini, "daftar tak berubah" dan "ada yang
-		// macet" sama-sama diam — susah dibedakan saat debugging.
-		log.Printf("tick: watchlist aksi=skip_dedup (candle H1 sama, daftar %d zona tak berubah)", len(n.NextPOIsByTF))
-	}
-	if msg != "" {
-		if err := d.notifier.SendMessage(msg); err != nil {
-			log.Printf("tick: watchlist aksi=gagal_kirim: %v", err)
-		} else {
+			aksi = fmt.Sprintf("daftar berubah, %d zona", len(n.NextPOIsByTF))
+		case changed && fpHasZones(st.LastWatchlist):
+			msg = fmt.Sprintf("📍 *Watchlist POI per TF — %s*\n⚠️ *Semua zona pantauan hilang (jebol/tak valid lagi).* Harga: `%.2f`",
+				d.instrument, n.Price)
+			if offNote != "" {
+				msg += "\n" + offNote
+			}
+			aksi = "semua zona hilang"
+		case changed:
+			// Tak ada zona POI, tapi fingerprint berubah. Kirim HANYA bila ada perubahan
+			// AMS (ITL/ITH terbentuk/break — Pertemuan 6); selain itu (run perdana / token
+			// rutin) catat diam-diam supaya tak spam.
+			diff, _ := watchlistDiff(st.LastWatchlist, n)
+			var amsLines []string
+			for _, dl := range diff {
+				if strings.HasPrefix(dl, "AMS") {
+					amsLines = append(amsLines, dl)
+				}
+			}
+			if len(amsLines) > 0 {
+				msg = "⚠️ *AMS BERUBAH*"
+				if offNote != "" {
+					msg += "\n" + offNote
+				}
+				for _, dl := range amsLines {
+					msg += "\n• *" + dl + "*"
+				}
+				msg += "\n" + wlBlock
+				aksi = "AMS berubah (tanpa zona)"
+			} else {
+				st.LastWatchlist = fp // run perdana, daftar kosong → catat saja
+				stChanged = true
+			}
+		case fp != st.LastWatchlist:
+			// Hanya transisi MO harian (none↔side) — bukan trigger; catat diam-diam
+			// supaya tidak menumpuk jadi "crossing" palsu di tick berikutnya.
 			st.LastWatchlist = fp
-			st.LastWatchlistH1 = n.At
 			stChanged = true
-			log.Printf("tick: watchlist aksi=terkirim (%s)", aksi)
+			log.Printf("tick: watchlist aksi=skip_mo_harian (transisi MO rutin, tanpa pesan)")
+		case d.heartbeat && newH1 && adaZona:
+			msg = fmt.Sprintf("ℹ️ *Tidak ada perubahan zona (heartbeat)*\n%s", wlBlock)
+			aksi = fmt.Sprintf("heartbeat H1, %d zona tak berubah", len(n.NextPOIsByTF))
+		case d.heartbeat && newH1:
+			st.LastWatchlistH1 = n.At // candle baru tapi memang tak ada zona — catat saja
+			stChanged = true
+			log.Printf("tick: watchlist aksi=skip_kosong (candle H1 baru, tak ada zona)")
+		default:
+			// Transparansi log: tanpa baris ini, "daftar tak berubah" dan "ada yang
+			// macet" sama-sama diam — susah dibedakan saat debugging.
+			log.Printf("tick: watchlist aksi=skip_dedup (candle H1 sama, daftar %d zona tak berubah)", len(n.NextPOIsByTF))
 		}
+		if msg != "" {
+			if err := d.notifier.SendMessage(msg); err != nil {
+				log.Printf("tick: watchlist aksi=gagal_kirim: %v", err)
+			} else {
+				st.LastWatchlist = fp
+				st.LastWatchlistH1 = n.At
+				stChanged = true
+				log.Printf("tick: watchlist aksi=terkirim (%s)", aksi)
+			}
+		}
+	} else {
+		log.Printf("tick: watchlist aksi=skip_nonaktif (-no-watchlist)")
 	}
 
 	// --- 3. Alert DAY-TYPE: heads-up sekali/trading-day saat heavy_expanding/heavy_accum ---
